@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Atmel Studio Solution File, Format Version 11.00
+Project("{54F91283-7BC4-4236-8FF9-10F437C3AD48}") = "bldcdisp", "bldcdisp.cproj", "{4AB900FE-4BA0-4335-B3EA-AD7100AD8846}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|AVR = Debug|AVR
+		Release|AVR = Release|AVR
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4AB900FE-4BA0-4335-B3EA-AD7100AD8846}.Debug|AVR.ActiveCfg = Debug|AVR
+		{4AB900FE-4BA0-4335-B3EA-AD7100AD8846}.Debug|AVR.Build.0 = Debug|AVR
+		{4AB900FE-4BA0-4335-B3EA-AD7100AD8846}.Release|AVR.ActiveCfg = Release|AVR
+		{4AB900FE-4BA0-4335-B3EA-AD7100AD8846}.Release|AVR.Build.0 = Release|AVR
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
