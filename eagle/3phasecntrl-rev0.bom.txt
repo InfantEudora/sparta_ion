@@ -1,0 +1,36 @@
+Partlist exported from E:/IDE-E/Mijn Documenten/Projects/code/sparta_ion.git/eagle/3phasecntrl-rev0.sch at 4/5/2015 2:22:53 PM
+
+Assembly variant: 
+
+Qty Value              Device             Parts                              Farnell FarnellAlt1
+1                      MA03-1             STRAIN                                                
+1                      MA05-1             X3-HALL                                               
+2                      MA07-1             MMUP, PWM                          1516283            
+1                      SJ2W               VBUS                                                  
+7   1k                 R-EU_M0805         R10, R12, R30, R35, R45, R67, R68  2078954            
+1   2R2                R-EU_M0805         R58                                2078937            
+1   4.7u/16V           C-EUC0805K         C16                                1759427            
+4   4k7                R-EU_M0805         R8, R13, R14, R32                  2074469            
+8   10R                R-EU_M0805         R3, R4, R5, R6, R7, R9, R11, R31   2073604            
+2   10u/16V            CPOL-EU153CLV-0405 C4, C11                            9265554 9696920    
+1   10u/50V            CPOL-EU153CLV-0605 C6                                 2068686            
+1   68u/25V            CPOL-EU153CLV-0605 C5                                 2326209            
+3   100k               R-EU_M0805         R1, R27, R34                       2073608            
+8   100n               C-EUC0805K         C1, C2, C3, C7, C14, C15, C19, C20 2320839            
+1   140mA              PTCFUSE-1812       F1                                 1345923            
+1   150u/250mA         L-USWE-TPC         L1                                 2328764            
+1   240k               R-EU_M0805         R29                                2139055            
+3   390k               R-EU_M0805         R26, R28, R33                      9234322            
+4   470R               R-EU_M0805         R2, R18, R21, R22                  2073777            
+1   ATXmega32A4U       XMEGA16A4A         IC3                                2443192            
+1   BAT46WH            DIODE-SOD323-W     D5                                 2069340            
+2   BC847              BC847              T1, T2                             1081232            
+1   GREEN              LEDCHIPLED_0805    LED1                               2290331            
+1   LD1117S33          LM340ST-ST         IC6                                1467779            
+1   LD1117S50          LM340ST-ST         IC4                                1467780            
+1   LM5008MM           LM5008MM           U1                                 2112610            
+3   MOUNT-PAD-ROUND3.2 MOUNT-PAD-ROUND3.2 H1, H2, H3                                            
+1   PROG-ATMEL-PDI     PROG-ATMEL-PDI     XP                                                    
+1   RED                LEDCHIPLED_0805    LED2                               1318244            
+1   SM6T39A            DIODE-SMB          D4                                 9802703            
+1   SS110B             DIODE-SMB          D1                                 1861422            
