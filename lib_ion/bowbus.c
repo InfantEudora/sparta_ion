@@ -78,7 +78,7 @@ void bus_init(bowbus_net_s* bus){
 	display.road_legal = true;
 	
 	wait_for_last_char = false;
-	display.function_val2 = 5;
+	display.function_val2 = 9;
 	display.function_val3 = 1;
 }
 
@@ -630,19 +630,19 @@ bool bus_display_update(bowbus_net_s* bus){
 		//Remove the leading zeros
 		if (t < 1000){
 			dec[1] = DISP_CHAR_CLEAR;
-			}else{
+		}else{
 			dec[1] = t / 1000;
 			t-= dec[1]*1000;
 		}
-		if (t < 100){
+		if ((t < 100)&& (display.strain_th < 100)){
 			dec[2] = DISP_CHAR_CLEAR;
-			}else{
+		}else{
 			dec[2] = t / 100;
 			t-= dec[2]*100;
 		}
-		if (t < 10){
+		if ((t < 10)&& (display.strain_th < 10)){
 			dec[3] = DISP_CHAR_CLEAR;
-			}else{
+		}else{
 			dec[3] = t / 10;
 			t-= dec[3]*10;
 		}
@@ -650,15 +650,8 @@ bool bus_display_update(bowbus_net_s* bus){
 	}else if (display.func == 0){
 		uint32_t t;
 		//Default: show the current.
-		if (display.error == 0){
-			
-			if (display.function_val5 == 0){
-				distance = display.current;	
-				
-			}else if (display.function_val5 == 1){
-				//display.power = 1;
-				distance = display.power;
-			}				
+		if (display.error == 0){			
+			distance = display.current;				
 			//Display a sign if below zero.
 			if (distance < 0){
 				//Create the characters.
@@ -673,8 +666,9 @@ bool bus_display_update(bowbus_net_s* bus){
 				dec[0] = DISP_CHAR_CLEAR;
 			}
 			
-			if (display.function_val5 == 0){
+			//if (display.function_val5 == 0){
 				//Remove the leading zero.
+				
 				if (t < 1000){
 					dec[1] = DISP_CHAR_CLEAR;
 				}else{
@@ -685,7 +679,8 @@ bool bus_display_update(bowbus_net_s* bus){
 				t-= dec[2]*100;
 				dec[3] = t / 10;
 				t-= dec[3]*10;
-			}else{
+			
+			/*}else{
 				//Remove the leading zeros
 				if (t < 1000){
 					dec[1] = DISP_CHAR_CLEAR;
@@ -705,7 +700,7 @@ bool bus_display_update(bowbus_net_s* bus){
 					dec[3] = t / 10;
 					t-= dec[3]*10;
 				}
-			}			
+			}*/			
 		}else{
 			distance = display.error;	
 			t = distance;		
@@ -794,7 +789,7 @@ bool bus_display_update(bowbus_net_s* bus){
 	
 	//This guy allows you to set comma's, hide/show the km label and hide/show the soc
 	msg[6] = DISP_MASK_SOC;
-	if ((display.func == 0) && (display.error == 0) &&  (display.function_val5 == 0)){
+	if ((display.func == 0) && (display.error == 0)/* && (display.function_val5 == 0)*/){
 		msg[6] |= DISP_MASK_COMMA;
 	}
 		

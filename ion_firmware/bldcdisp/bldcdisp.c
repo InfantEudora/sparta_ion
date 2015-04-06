@@ -130,16 +130,17 @@ uint8_t startup = 10;
 //If you want the wheel to go the other way.
 #define FORWARD 0
 #define BACKWARD 1
-uint8_t direction = BACKWARD;
+uint8_t direction = BACKWARD;		//This is actually forward....
 
 
-uint16_t strain_threshhold = 200;
+uint16_t strain_threshhold = 200;	//Calibration value for strain sensor.
+uint8_t strain_cal_inc = 1;			
 int32_t ad_strain = 0;
 int32_t ad_strain_sum = 0;
 int32_t ad_strain_av = 0;
-uint16_t strain_cnt = 0;		//If the strain registered, how long it should be on for.
+uint16_t strain_cnt = 0;			//If the strain registered, how long it should be on for.
 
-uint32_t ad_temp_ref = 0;	//Factory reference.
+uint32_t ad_temp_ref = 0;			//Factory reference.
 uint32_t ad_temp = 0;
 uint32_t ad_temp_sum = 0;
 uint32_t ad_temp_av = 0;
@@ -189,7 +190,7 @@ uint8_t slope_throttle = 1;	//Rate at which PWM may increase for throttle.
 uint8_t slope_brake = 10;		//Rate at which PWM may increase for brake.
 
 //Throttle limits.
-#define THROTTLE_DISC	100		//Throttle disconnected. //600 sasfe value
+#define THROTTLE_DISC	100		//Throttle disconnected. //600 safe value
 #define THROTTLE_LOW	730		//Lowest
 #define THROTTLE_HIGH	2890	//Highest
 #define THROTTLE_OVER	3900	//Too high //3100 safe value
@@ -1076,19 +1077,21 @@ int main(void){
 							//Cal current reg:
 							//Current calibration:
 							#if(HARDWARE_VER == HW_CTRL_REV0)
-							int32_t regualtion = ad_current_regav; 
-							regualtion += 1749;
-							regualtion *= 1000;
-							regualtion /= 286;
-							regualtion -= 34;
+							int32_t regulation = ad_current_regav; 
+							regulation += 1749;
+							regulation *= 1000;
+							regulation /= 286;
+							regulation -= 34;
 							#endif
+							
+							int16_t target = ((int16_t)(throttle*15)/10)*2*(int16_t)motor.mode;
 							
 							//Current regulation
 							if (speed){
-								if (regualtion < ((int16_t)throttle*(int16_t)motor.mode)){ //200 * 0-5
+								if (regulation < (target/2)){ //200 * 0-5
 									//More power
 									pwm_dec(slope_throttle*2);
-								}else if (regualtion < ((int16_t)throttle*(int16_t)motor.mode)){ 
+								}else if (regulation < target){ 
 									//More power
 									pwm_dec(slope_throttle);
 								}else{
@@ -1135,19 +1138,21 @@ int main(void){
 							//Cal current reg:
 							//Current calibration:
 							#if(HARDWARE_VER == HW_CTRL_REV0)
-							int32_t regualtion = ad_current_regav; 
-							regualtion += 1749;
-							regualtion *= 1000;
-							regualtion /= 286;
-							regualtion -= 34;
+							int32_t regulation = ad_current_regav; 
+							regulation += 1749;
+							regulation *= 1000;
+							regulation /= 286;
+							regulation -= 34;
 							#endif
+
+							int16_t target = ((int16_t)(pedal_signal*15)/10)*2*(int16_t)motor.mode;
 							
 							//Current regulation
 							if (speed){
-								if (regualtion < ((int16_t)pedal_signal*2*(int16_t)motor.mode)){ //200 * 0-5
+								if (regulation < (target/2)){ //200 * 0-5
 									//More power
 									pwm_dec(slope_throttle*2);
-								}else if (regualtion < ((int16_t)pedal_signal*2*(int16_t)motor.mode)){ 
+								}else if (regulation < target){ 
 									//More power
 									pwm_dec(slope_throttle);
 								}else{
@@ -1270,6 +1275,21 @@ int main(void){
 				pwm_set_max = PWM_SET_MAX;
 			}
 			
+			//Throttle from menu.			
+			if (display.online && (display.func == 5) && (display.menu_downcnt > 30)){
+				if (motor.throttle < 5){
+					motor.throttle = 5;
+				}
+				if (motor.throttle < 100){
+					motor.throttle++;
+				}
+			}else{
+				#if(!HARDWARE_HAS_THROTTLE)
+				if (motor.throttle > 0){
+					motor.throttle -= 1;
+				}
+				#endif				
+			}
 			
 			//Startup from standstill
 			uint8_t throttle_was = throttle;
@@ -1285,7 +1305,7 @@ int main(void){
 			if (!motor.mode){
 				pwm_inc(200);
 			}
-			//Testing 
+			
 			
 					
 			
@@ -1382,12 +1402,19 @@ int main(void){
 						strain_threshhold = 200;
 						display.strain_th = strain_threshhold;
 					}						
-					if ((display.func == 3) && (display.menu_downcnt > 100)){						
+					if ((display.func == 3) && (display.menu_downcnt > 50)){						
 						if (ad_strain_av > strain_threshhold){
-							strain_threshhold++;
+							strain_threshhold+=strain_cal_inc;
 						}
 						display.strain_th = strain_threshhold;
 						flagsave = true;
+						
+						if (display.menu_downcnt > 100){
+							strain_cal_inc = 5;
+						}
+					}else if  ((display.func == 3) && (display.button_state_prev == 0) && (display.button_state == BUTT_MASK_FRONT)){
+						strain_threshhold += 1;
+						display.strain_th = strain_threshhold;
 					}
 					
 					if (display.menu_timeout == 0){
