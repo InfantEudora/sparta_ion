@@ -175,8 +175,7 @@ struct display_state_s{
 	
 	uint8_t func;
 	
-	bool road_legal;	//Oh noes!
-	//uint8_t test;		//What better
+	bool road_legal;	//When true, middle button overrides throttle.	
 	
 	uint32_t distance;	//What value should be in the distance bar.
 	uint16_t speed;		//Value in the speed bar. 10 km/h is stored as 100

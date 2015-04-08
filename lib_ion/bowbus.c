@@ -534,12 +534,18 @@ void bus_display_buttonpress(bowbus_net_s* bus){
 				display.function_val4 = 0;					
 			}			
 		}else if (display.button_state_prev == BUTT_MASK_FRONT){
+			
 			//Handle button press depending on menu:
 			if (display.func == 0){
-				motor.mode++;
-				if (motor.mode == 6){
-					motor.mode = 0;
-				}
+				if (display.road_legal == false){
+					//Test mode
+					
+				}else{
+					motor.mode++;
+					if (motor.mode == 6){
+						motor.mode = 0;
+					}
+				}				
 				motor.needs_update = true;
 			}else if (display.func == 1){
 				display.function_val1++;		

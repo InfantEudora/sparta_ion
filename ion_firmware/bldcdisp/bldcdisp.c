@@ -67,34 +67,37 @@ bool flag_keep_pwm = false;
 
 bool flag_brake_lowrpm = false;	//Brake has turned lower mosfets on.
 
-volatile uint8_t brake = 0;		//0 = no regen, 100 = max regen.
-volatile uint8_t throttle = 0;
-volatile uint8_t pedal_signal = 0;		
-volatile uint8_t brake_level = 0;	//Brake power
+volatile uint8_t brake				= 0;	//0 = no regen, 100 = max regen.
+volatile uint8_t throttle_prev		= 0;	
+volatile uint8_t throttle			= 0;		
+volatile uint8_t throttle_override  = 0;	//Override for testing.
+volatile uint8_t pedal_signal_prev	= 0;		
+volatile uint8_t pedal_signal		= 0;		
+volatile uint8_t brake_level		= 0;	//Brake power
 
-//bitmaps for status flags
-#define STAT_OK					0
-#define STAT_THROTTLE_FAULT		1
-#define STAT_OVER_VOLTAGE		2
-#define STAT_UNDER_VOLTAGE		4
-#define STAT_REGEN_HIGH			8
-#define STAT_STOPPED			16
-#define STAT_USETHROTTLE		32
-#define STAT_HALL_FAULT			64
-#define STAT_BRAKE_FAULT		128
+//Bitfields for status flags
+#define STAT_OK					0x0000
+#define STAT_THROTTLE_FAULT		0x0001
+#define STAT_OVER_VOLTAGE		0x0002
+#define STAT_UNDER_VOLTAGE		0x0004
+#define STAT_REGEN_HIGH			0x0008
+#define STAT_STOPPED			0x0010
+#define STAT_USETHROTTLE		0x0020
+#define STAT_HALL_FAULT			0x0040
+#define STAT_BRAKE_FAULT		0x0080
 
-//All the erros 
+//All the possible errors 
 #define STAT_ERROR_MASK			(STAT_THROTTLE_FAULT | STAT_BRAKE_FAULT | STAT_OVER_VOLTAGE | STAT_UNDER_VOLTAGE | STAT_REGEN_HIGH | STAT_STOPPED )
 
-//Status bitmask
+//Status bitmap
 uint32_t status = 0;
 
 //Functions:
 void status_set(uint32_t);
 void status_clear(void);
 bool isfaultset(void);
-void pwm_inc(uint8_t by);
-void pwm_dec(uint8_t by);
+void pwm_less(uint8_t by);
+void pwm_more(uint8_t by);
 void commute_start(void);
 void commute_forward(void);
 void commute_backward(void);
@@ -198,8 +201,9 @@ uint8_t slope_brake = 10;		//Rate at which PWM may increase for brake.
 uint16_t throttle_tick = 0;
 bool throttle_cruise = false;
 
-uint16_t testvalue = 40;
-uint16_t highestforce = 0;
+//Strain min and maximum recorded value.
+int16_t highestforce = 0;
+int16_t lowestforce = 0;
 
 bowbus_net_s bus;
 
@@ -234,7 +238,7 @@ void init_pwm(void){
 	HIRESC.CTRLA = HIRES_HREN_TC0_gc;
 	
 	//Dead time:
-#if(HARDWARE_VER == HW_CTRL_REV0)
+#if(HARDWARE_VER == HW_CTRL_REV1)
 	//Sparta ION Board has hardware deadtime.
 	AWEXC.DTHS = 0;
 	AWEXC.DTLS = 0;
@@ -245,7 +249,7 @@ void init_pwm(void){
 	
 	AWEXC.STATUS = AWEX_DTHSBUFV_bm | AWEX_DTLSBUFV_bm | AWEX_FDF_bm;
 	
-#if(HARDWARE_VER == HW_CTRL_REV0)
+#if(HARDWARE_VER == HW_CTRL_REV1)
 	//This hardware has inverted high side inputs, so we'll invert them again.	
 	PORTC.PIN0CTRL = PORT_INVEN_bm;
 	PORTC.PIN2CTRL = PORT_INVEN_bm;
@@ -255,7 +259,7 @@ void init_pwm(void){
 #endif
 }
 
-#if(HARDWARE_VER == HW_CTRL_REV0)
+#if(HARDWARE_VER == HW_CTRL_REV1)
 
 void sector_0(void){
 	AWEXC.OUTOVEN =  PIN0_bm | PIN1_bm;
@@ -344,7 +348,7 @@ void sector_5(void){
 
 void commute_start(void){
 	//Set deadtime, HW specific
-#if(HARDWARE_VER == HW_CTRL_REV0)	
+#if(HARDWARE_VER == HW_CTRL_REV1)	
 	AWEXC.DTHS = 0;
 	AWEXC.DTLS = 0;
 #else
@@ -388,7 +392,10 @@ void pwm_freewheel(void){
 	AWEXC.CTRL = 0;
 }
 
-//Connect all lower side mosfets.
+/*
+	Connect all lower side MOSFETs, it's like shorting the wires together.
+	Better not do this while driving really fast.
+*/
 void tie_ground(void){
 	PORTC.OUTCLR = PIN5_bm | PIN4_bm | PIN3_bm | PIN2_bm | PIN1_bm | PIN0_bm;
 	//Dead time:
@@ -396,15 +403,16 @@ void tie_ground(void){
 	AWEXC.CTRL = 0;
 
 	//Enable lower FETs
-	#if(HARDWARE_VER == HW_CTRL_REV0)	
+	#if(HARDWARE_VER == HW_CTRL_REV1)	
 		PORTC.OUTSET =  PIN5_bm |  PIN3_bm |  PIN1_bm;
 	#else
 		PORTC.OUTSET =  PIN4_bm |  PIN2_bm |  PIN0_bm;
 	#endif	
 }
 
+//Estimate the PWM value when freewheeling which would yield close to no current.
 uint16_t estimate_pwm_byspeed(){
-	uint16_t pwm_est = 0;
+	int16_t pwm_est = 0;
 #if((HARDWARE_VER == HW_BLDC_REV1)||(HARDWARE_VER == HW_BLDC_REV0))
 	if (speed > 0){
 		pwm_est = pwm_set_max - ((((pwm_set_max) - (pwm_set_min)) / 30) * (speed/10));
@@ -421,7 +429,7 @@ uint16_t estimate_pwm_byspeed(){
 #else
 	//Inverted PWM:
 	if (speed > 0){
-		pwm_est = pwm_set_min + (((uint16_t)speed*10UL)/10UL);
+		pwm_est = pwm_set_min + (((uint16_t)speed*12UL)/10UL);
 		
 		if (pwm_est < pwm_set_min){
 			pwm_est = pwm_set_min;
@@ -433,22 +441,22 @@ uint16_t estimate_pwm_byspeed(){
 		pwm_est = pwm_set_min;
 	}
 #endif
-	return pwm_est;
+	return (uint16_t)pwm_est;
 }					
 
-
-
+//Get all analog measurement values.
 void get_measurements(void){
 	uint32_t usample = 0;
-	#if(HARDWARE_VER != HW_CTRL_REV0)
-	uint32_t gsample = 0;
+	#if(HARDWARE_VER != HW_CTRL_REV1)
+	 uint32_t gsample = 0;
+	#else
+	 int32_t ssample = 0;
 	#endif
 	uint32_t bsample = 0;
-	int32_t isample = 0;
-	int32_t ssample = 0;
+	int32_t isample = 0;	
 
 	//Enable lower FETs
-	#if(HARDWARE_VER == HW_CTRL_REV0)
+	#if(HARDWARE_VER == HW_CTRL_REV1)
 		//This board does not have brake/throttle, but a strain.
 		for (uint16_t i=0;i<ad_max_samples;i++){
 			adc_init_single_ended(REF_3V3,ADC_CH_MUXPOS_PIN7_gc); //Bat Voltage.
@@ -479,7 +487,7 @@ void get_measurements(void){
 	ad_current = isample/(int32_t)ad_max_samples;
 
 	//Hardware specific inputs.
-	#if(HARDWARE_VER == HW_CTRL_REV0)		
+	#if(HARDWARE_VER == HW_CTRL_REV1)		
 		ad_strain = (int32_t)ssample/(int32_t)ad_max_samples;		
 		ad_strain_sum += ad_strain;
 		
@@ -500,11 +508,9 @@ void get_measurements(void){
 	ad_current_regsum += ad_current;
 }
 
-/*
-	Returns true if valid.
-*/
-bool get_hall(void){
-		
+
+//Returns true if the hall sensors produce a valid signal.
+bool get_hall(void){		
 	//filter:
 	hallhi = 0;
 	halllo = 0xFFFF;
@@ -512,7 +518,7 @@ bool get_hall(void){
 	//Clear hall
 	hall_state = 0;
 	
-	#if(HARDWARE_VER == HW_CTRL_REV0)
+	#if(HARDWARE_VER == HW_CTRL_REV1)
 	//Maybe....? Yep... they're open-drain.
 	PORTD.DIRCLR = PIN5_bm | PIN6_bm | PIN7_bm;
 	
@@ -568,9 +574,9 @@ bool get_hall(void){
 
 
 //Hall states in oder: 0x05,0x04,0x06,0x02,0x03,0x01;
-//Change Fets in forward direction.
+//Change FETs in forward direction.
 void commute_forward(void){
-	//Reset highside refresh thingy:
+	//Reset high-side gate-drive counter:
 	TCD0.CNT = 0;
 	
 	switch(hall_state){
@@ -596,7 +602,7 @@ void commute_forward(void){
 }
 
 void commute_backward(void){
-	//Reset highside refresh thingy:
+	//Reset high-side gate-drive counter:	
 	TCD0.CNT = 0;
 	
 	switch(hall_state){	
@@ -648,9 +654,16 @@ void fake_hall_forward(void){
 }
 
 /*
-	Returns true if ad range is in bouds.
+	This function should read the throttle, depending on your hardware.
+	It can be read from an analog signal, an on/off signal or from a message.
+	throttle is set from 0-100
 */
 bool get_throttle(void){
+	//Remember prev throttle value;
+	throttle_prev = throttle;
+	
+	#if((OPT_THROTTLE==FW_THROTTLE_DIRECT)||(OPT_THROTTLE==FW_THROTTLE_MASTER))
+	//Convert analog throttle values.
 	if (ad_throttle < THROTTLE_DISC){
 		return false;
 	}
@@ -669,31 +682,34 @@ bool get_throttle(void){
 		t *= (ad_throttle - THROTTLE_LOW);
 		throttle = t / 1000; 
 	}
+	#endif
 	
 	//If we are cruising:
 	if (throttle_cruise){
 		throttle = 100;
 	}		
 	
-	//Scale:
-	if ((display.online) && (!display.road_legal)){
-		if ((motor.mode > 0) && (motor.mode < 6)){
-			uint8_t s = motor.mode;
-			throttle = (throttle / 5) * s;
-		}else{
-			throttle = 0;
-		}
+	#if(OPT_THROTTLE==FW_THROTTLE_SLAVE)
+	//Get throttle value from BUS.
+	if (display.online){		
+		throttle = motor.throttle;
 	}else{
-		throttle = 0;
+		return false;
 	}
+	#endif
 	
-	return true;	
+	//Override by pressing button in menu 5.
+	if (throttle_override > 0){
+		throttle = throttle_override;
+	}
+	return true;
 }
 
 /*
 	Returns true is brake signal is ok
 */
 bool get_brake(void){
+	#if(OPT_BRAKE==FW_BRAKE_DIRECT)
 	if (ad_brake < THROTTLE_DISC){
 		return false;
 	}
@@ -715,6 +731,7 @@ bool get_brake(void){
 		brake = t / 1000;
 		use_brake = true;
 	}
+	#endif
 	
 	//Scale brake power.
 	if ((display.online) && (!display.road_legal)){
@@ -748,13 +765,12 @@ void read_calibration(void){
 }
 */
 int main(void){
+	//Run of the internal 32MHz oscillator.
 	clock_switch32M();
 	
 	init_pwm();
 	uart_init();	
 	bus_init(&bus);	
-	
-	
 	
 	//Clear the AD settings.
 	PORTA.DIR = 0;
@@ -792,10 +808,8 @@ int main(void){
 	sei();
 	
 	//Set defaults:
-	eepsettings.straincal = 200;
-	
+	eepsettings.straincal = 200;	
 	eemem_read_block(EEMEM_MAGIC_HEADER_SETTINGS,(uint8_t*)&eepsettings, sizeof(eepsettings), EEBLOCK_SETTINGS1);
-	
 	
 	//Apply settings...
 	strain_threshhold = eepsettings.straincal;
@@ -807,6 +821,14 @@ int main(void){
 	//Startup PWM value.
 	pwm = PWM_SET_MIN;
 	
+	//Test
+	/*
+	motor.mode = 1;
+	display.road_legal = false;
+	display.function_val1 = 4;
+	display.function_val2 = 5;
+	*/
+	
 	uint8_t cnt_tm = 0;		//Used by TCC1
 	uint8_t poll_cnt = 0;	//Used for polling the display.	
 	uint16_t pwm_lim = 0;	//PWM limit may change at higher speed.
@@ -817,23 +839,13 @@ int main(void){
 	bool should_freewheel = true;
 	bool force_commute = false;
 	while(1){		
-		
-		
 		//Double check the PWM hasn't gone crazy:
 		if (pwm < pwm_set_min){
 			pwm = pwm_set_min;
 		}
 		if (pwm > pwm_set_max){
 			pwm = pwm_set_max;
-		}
-		
-		//Testing
-		if (testvalue > pwm_set_max){
-			testvalue = pwm_set_max;
 		}		
-		if (testvalue < pwm_set_min){
-			testvalue = pwm_set_min;
-		}
 
 		//Apply PWM settings.
 		TCC0.CCA = pwm;
@@ -866,9 +878,8 @@ int main(void){
 			//pwm_freewheel();
 		}
 				
-		//Remeber...
-		pwm_prev = pwm;
-		
+		//Remember...
+		pwm_prev = pwm;		
 		
 		//Reset 
 		should_freewheel = false;
@@ -891,10 +902,10 @@ int main(void){
 			should_freewheel = true;
 		}
 		
-		//Get voltage/current.
+		//Get voltage,current and whatever else.
 		get_measurements();
 		
-		//Hard under and over voltage.
+		//Instantanious under and over voltage.
 		if (ad_voltage > 3700){ //3900
 			//Freewheel as fast as possible.
 			pwm_freewheel();
@@ -905,7 +916,7 @@ int main(void){
 			pwm_freewheel();
 			should_freewheel = true;
 			status_set(STAT_UNDER_VOLTAGE);
-			pwm_inc(200);pwm_inc(200);
+			pwm_less(200);pwm_less(200); //OMG!
 		}
 
 		//Regenning too hard:
@@ -915,16 +926,16 @@ int main(void){
 			//should_freewheel = true;
 			//status_set(STAT_REGEN_HIGH);
 			//startup = 3;
-		}
+		}		
 		
-		#if (HARDWARE_HAS_THROTTLE)
 		if (use_throttle){
-			//This gas pedal is low on disconnect.					
+			//Get the throttle value.
 			if (!get_throttle()){
 				status_set(STAT_THROTTLE_FAULT);
 				should_freewheel = true;
 			}
-			
+		}
+		if (use_brake){		
 			//Use the brake too:
 			if (get_brake()){
 				if (use_brake){
@@ -939,9 +950,9 @@ int main(void){
 				status_set(STAT_BRAKE_FAULT);				
 				should_freewheel = true;
 			}
-		}
-		#endif
+		}		
 		
+		//Maybe it'll run without at some point...
 		if (usehall){
 			//Timer:
 			if (flag_hall_changed){
@@ -972,14 +983,18 @@ int main(void){
 				//Values reset in next if-statement.
 			}
 			
-			//Allowed to go faster if the commutation time is guaranteed to switch fast enough.
-			//TCD0 is used in case the motor suddenly stops. Capacitors are 100uF/16V
-			if (time_comm_av < 250){
-				//Round REV0 does not support 100% duty cycle.
+			//Allowed to go faster if the commutation time is guaranteed to switch fast enough.			
+			if ((time_comm_av < 350)&&display.online && (display.function_val2==9)){				
+				#if((HARDWARE_VER==HW_BLDC_REV0)||(HARDWARE_VER==HW_BLDC_REV1))
+				//TCD0 is used in case the motor suddenly stops. Capacitors are 100uF/16V
 				pwm_set_min = 0;
+				#else
+				//PWM is inverted on this board.
+				pwm_set_max = PWM_SET_MAX;
+				#endif
 			}
 			
-			//Limit for braking
+			//PWM limit for braking
 			pwm_lim = pwm_set_max -  (display.function_val3 * 10);
 			if (pwm_lim < pwm_set_min){
 				pwm_lim = pwm_set_min;
@@ -989,7 +1004,7 @@ int main(void){
 			
 			//That's really slow.
 			if (RTC.CNT> 5000){			
-				speed = 0;
+				speed = 0;				
 			}
 		
 			//Minimum response time
@@ -1026,19 +1041,19 @@ int main(void){
 								//If we're doing 10km/h, the motor is at 7V approx, 30% duty cycle.
 									
 								if (pwm < pwm_lim){
-									pwm_inc(slope_brake);
+									pwm_less(slope_brake);
 								}									
 									
 							}else{
 								//Back off
-								pwm_dec(slope_brake);
+								pwm_more(slope_brake);
 							}
 							//Voltage limits
 							if (ad_voltage > 3600){
-								pwm_dec(slope_brake/2);
+								pwm_more(slope_brake/2);
 							}
 							if (ad_voltage > 3700){
-								pwm_dec(slope_brake/2);
+								pwm_more(slope_brake/2);
 							}
 						}
 					}
@@ -1051,52 +1066,47 @@ int main(void){
 							flag_brake_lowrpm = false;
 						}
 
-
 						if (throttle > 5){
-							/*
-							//Throttle is current limited.
-							if ((ad_current_regav + 169) < (((int16_t)throttle)*8)){
-								//More power
-								pwm_dec(slope_throttle*2);
-							}else if ((ad_current_regav + 169) < (((int16_t)throttle)*16)){  //100 * 16 -> current of about 12 Amp									
-								//More power
-								pwm_dec(slope_throttle);
-							}else{
-								//Back off
-								pwm_inc(slope_throttle);
-							}*/
-							
 							//Voltage limits
 							if (ad_voltage < 1950){
-								pwm_inc(slope_throttle*2);
+								pwm_less(slope_throttle*2);
 							}	
 							if (ad_voltage < 1900){
-								pwm_inc(slope_throttle*2);
+								pwm_less(slope_throttle*2);
 							}
 							
-							//Cal current reg:
-							//Current calibration:
-							#if(HARDWARE_VER == HW_CTRL_REV0)
+							//Current measures this commutation cycle.
 							int32_t regulation = ad_current_regav; 
+							
+							//Fixed calibration. Regulation value of 100 = 1 Amp
+							#if(HARDWARE_VER == HW_CTRL_REV1)							
 							regulation += 1749;
 							regulation *= 1000;
 							regulation /= 286;
 							regulation -= 34;
+							#else
+							regulation += 169;
+							regulation *= 100;
+							regulation /= 75;
+							regulation += 18;
 							#endif
 							
+							//Target current.
 							int16_t target = ((int16_t)(throttle*15)/10)*2*(int16_t)motor.mode;
 							
 							//Current regulation
-							if (speed){
-								if (regulation < (target/2)){ //200 * 0-5
+							if (1){
+								if (regulation < (target/4)){ //200 * 0-5
+									pwm_more((speed/10)+1);
+								}else if (regulation < (target/2)){
 									//More power
-									pwm_dec(slope_throttle*2);
+									pwm_more(slope_throttle*2);
 								}else if (regulation < target){ 
 									//More power
-									pwm_dec(slope_throttle);
+									pwm_more(slope_throttle);
 								}else{
 									//Back off
-									pwm_inc(slope_throttle);
+									pwm_less(slope_throttle);
 								}
 							}							
 						}
@@ -1105,67 +1115,92 @@ int main(void){
 					if (use_pedalassist) {						
 						if (ad_strain_av > highestforce){
 							highestforce  = ad_strain_av;
-						}					
+						}
+						if (ad_strain_av < lowestforce){
+							lowestforce = ad_strain_av;
+						}
+						
+						//Compute 
+						pedal_signal_prev = pedal_signal;
+						uint8_t pedal_new = 0;
 						
 						if (ad_strain_av > strain_threshhold){
-							strain_cnt = 75UL + (2UL*speed);
+							//Get the pedal value.
 							if (ad_strain_av-strain_threshhold < 100){
-								pedal_signal = ad_strain_av-strain_threshhold;
+								pedal_new = ad_strain_av-strain_threshhold;
 							}else{
-								pedal_signal = 100;
+								pedal_new = 100;
+							}
+						
+							//Reset timer.
+							if (pedal_new >= pedal_signal){								
+								strain_cnt = 120;
+							}else if (pedal_new > 20){
+								strain_cnt = 60;	
 							}							
-							
 						}
+						
+						//Take the highest as keep it there.
+						if (pedal_new > pedal_signal_prev){
+							pedal_signal = pedal_new;
+						}
+						
 						
 						if (strain_cnt){
 							strain_cnt--;
 						}else{
-							pedal_signal = 0;
+							//Gradually slope to 
+							if (pedal_signal){
+								pedal_signal--;
+							}							
 						}
 						
-						if (pedal_signal && strain_cnt){
+						if ((pedal_signal > 15) && strain_cnt){
 							//Same control loop as in throttle:
-						
-							
 							//Voltage limits
 							if (ad_voltage < 1950){
-								pwm_inc(slope_throttle*2);
+								pwm_less(slope_throttle*2);
 							}	
 							if (ad_voltage < 1900){
-								pwm_inc(slope_throttle*2);
+								pwm_less(slope_throttle*2);
 							}
 							
-							//Cal current reg:
-							//Current calibration:
-							#if(HARDWARE_VER == HW_CTRL_REV0)
-							int32_t regulation = ad_current_regav; 
+							//Current measures this commutation cycle.
+							int32_t regulation = ad_current_regav;
+							
+							//Fixed calibration. Regulation value of 100 = 1 Amp
+							#if(HARDWARE_VER == HW_CTRL_REV1)
 							regulation += 1749;
 							regulation *= 1000;
 							regulation /= 286;
 							regulation -= 34;
+							#else
+							regulation += 169;
+							regulation *= 100;
+							regulation /= 75;
+							regulation += 18;
 							#endif
-
+							
+							//Target current.
 							int16_t target = ((int16_t)(pedal_signal*15)/10)*2*(int16_t)motor.mode;
 							
 							//Current regulation
-							if (speed){
-								if (regulation < (target/2)){ //200 * 0-5
+							if (1){
+								if (regulation < (target/4)){
+									pwm_more((speed/10)+1);
+								}else if (regulation < (target/2)){
 									//More power
-									pwm_dec(slope_throttle*2);
+									pwm_more(slope_throttle*2);
 								}else if (regulation < target){ 
 									//More power
-									pwm_dec(slope_throttle);
+									pwm_more(slope_throttle);
 								}else{
 									//Back off
-									pwm_inc(slope_throttle);
+									pwm_less(slope_throttle);
 								}
 							}			
-						}
-						
+						}						
 					}
-					
-					
-
 				}else{ //if (off)
 					//Undo braking at low RPM
 					if (flag_brake_lowrpm){
@@ -1173,9 +1208,7 @@ int main(void){
 						tie = false;
 						status_clear();
 						flag_brake_lowrpm = false;
-					}
-					
-					
+					}					
 				}
 			}			
 		}else{ //Hall hasn't changed.
@@ -1183,7 +1216,6 @@ int main(void){
 			if (RTC.CNT > time_comm_av_last){
 				//Reset timer.
 				RTC.CNT = 0;				
-				
 			}					
 		}		
 		
@@ -1220,9 +1252,8 @@ int main(void){
 			pwm = pwm_prev;
 		}
 
+		//Counter for speed.
 		cnt_rotations = cnt_commutations / 48;
-		
-		
 				
 		//Set display data	
 		display.voltage = ad_voltage_av;
@@ -1249,82 +1280,70 @@ int main(void){
 		}
 		display.cruise = throttle_cruise;
 		
-		//Throttle test
-		//display.speed = pwm;
-		//display.current = status;
-		
+		//About every 14 ms.
 		if (TCC1.CNT > 450){
 			cnt_tm++;
 			TCC1.CNT = 0;
 			
-			//Testing
-			/*
-			if (display.button_state & BUTT_MASK_FRONT){
-				if (testvalue < (PWM_SET_MAX -5)){
-					testvalue+=5;
-				}
-			}else if (display.button_state & BUTT_MASK_TOP){
-				if (testvalue > (PWM_SET_MIN+5)){
-					testvalue-=5;
-				}
-			}*/
-			
-			//Apply speed limit:
+			//Apply PWM limit:
+			#if(HARDWARE_VER==HW_CTRL_REV1)
 			pwm_set_max = (display.function_val2 +1) * 50;
 			if (pwm_set_max > PWM_SET_MAX){
 				pwm_set_max = PWM_SET_MAX;
 			}
+			#else
+			pwm_set_min = (display.function_val2 +1) * 50;
+			if (pwm_set_max > PWM_SET_MAX){
+				pwm_set_max = PWM_SET_MAX;
+			}
+			#endif			
 			
-			//Throttle from menu.			
-			if (display.online && (display.func == 5) && (display.menu_downcnt > 30)){
-				if (motor.throttle < 5){
-					motor.throttle = 5;
-				}
-				if (motor.throttle < 100){
-					motor.throttle++;
+			//Throttle from menu.
+			#if(HARDWARE_SUPPORTS_DISPLAY)
+			if (display.online && (display.func == 0) &&(!display.road_legal) && (display.menu_downcnt > 30)){
+				
+				if (throttle_override < 100){
+					throttle_override++;
 				}
 			}else{
-				#if(!HARDWARE_HAS_THROTTLE)
-				if (motor.throttle > 0){
-					motor.throttle -= 1;
-				}
-				#endif				
+				throttle_override = 0;
 			}
+			#endif
 			
-			//Startup from standstill
-			uint8_t throttle_was = throttle;
-			throttle = motor.throttle;
-			if ((throttle_was == 0) && throttle && (speed == 0)){
+			//Startup from standstill			
+			if (throttle && (speed == 0)){
 				force_commute = true;
-				pwm_inc(20);
+				//pwm_less(20);
 			}else{
 				force_commute = false;
-			}
-			
+			}			
 			
 			if (!motor.mode){
-				pwm_inc(200);
-			}
-			
-			
-					
-			
+				pwm_less(200);
+			}			
 			
 			//Last character in message
 			if (wait_for_last_char){
 				wait_for_last_char = false;
 			}else{
 				bus_endmessage(&bus);
-			}
+			}			
 			
-			
-			
-			//Estimate speed  /pwm. Only when there is no throttle signal or brake.
+			//Estimate PWM value by speed. Only when there is no throttle signal or brake.
 			if (!use_brake){
 				if ((use_throttle && (throttle < 5)) && ((use_pedalassist)&&(!pedal_signal))){
 					pwm = estimate_pwm_byspeed();					
 				}
-			}			
+			}
+			
+			//Speed is now the amount of commutations per seconds.
+			if (commtime_sum){
+				speed = (commtime_cnt * 32768UL) / commtime_sum;
+				//With a 26" wheel:
+				speed = (speed * 10000UL) / 6487UL;
+			}else{
+				speed=0;
+			}
 			
 			//Send timer tick
 			bus_tick(&bus);
@@ -1363,16 +1382,7 @@ int main(void){
 					bus_display_poll(&bus);
 					#endif
 				}else if (poll_cnt == 4){
-					//Update the display, and it's variables:
-					
-					//Speed is now the amount of commutations per seconds.
-					if (commtime_sum){
-						speed = (commtime_cnt * 32768UL) / commtime_sum;
-						//With a 26" wheel:
-						speed = (speed * 10000UL) / 6487UL;
-					}else{
-						speed=0;
-					}						
+					//Update the display, and it's variables:									
 					
 					commtime_sum = 0;
 					commtime_cnt = 0 ;
@@ -1386,7 +1396,7 @@ int main(void){
 					ad_current_sum = 0;
 
 					//Strain, if we have it:
-					#ifdef HARDWARE_HAS_STRAIN
+					#if(HARDWARE_HAS_STRAIN)
 					//Running average:
 					int32_t strain_val = ad_strain_sum / meas_cnt;
 					strain_val /= 100;
@@ -1422,40 +1432,17 @@ int main(void){
 							flagsave = false;
 							//Save
 							eepsettings.straincal = strain_threshhold;
-							eemem_write_block(EEMEM_MAGIC_HEADER_SETTINGS,(uint8_t*)&eepsettings, sizeof(eepsettings), EEBLOCK_SETTINGS1);
-							
-						}
-						
+							eemem_write_block(EEMEM_MAGIC_HEADER_SETTINGS,(uint8_t*)&eepsettings, sizeof(eepsettings), EEBLOCK_SETTINGS1);							
+						}						
 					}
-					
-					
-					//Set test value
-					//uint16_t s; 
-					//adc_init_single_ended(REF_3V3,ADC_CH_MUXPOS_PIN8_gc); //Strain Sensor.
-					//s = adc_getsample();
-					
-					//2180 average, over if you help.
-					/*
-					if (s > 2183){
-						display.value1 = 200;
-						testvalue+=1;
-					}else if (s < 2177){
-						display.value1 = 000;
-						testvalue-=1;
-					}else{
-						display.value1 = 100;
-					}*/
-					
-					
-					
 					
 					//motor.current = ad_strain_av;
 					display.value1 = ad_strain_av;// ad_strain_av - 2000;
 					display.value2 = highestforce;// ad_strain_av - 2000;
-					display.value3 = pwm;
-					
-					display.value4 = should_freewheel;
 					#endif
+					
+					display.value3 = pwm;
+					display.value4 = should_freewheel;
 					
 					//Temperature
 					ad_temp_av = ad_temp_sum / meas_cnt;
@@ -1482,7 +1469,7 @@ int main(void){
 					ad_voltage_av /= 886;
 					
 					//Current calibration:	
-					#if(HARDWARE_VER == HW_CTRL_REV0)
+					#if(HARDWARE_VER == HW_CTRL_REV1)
 					ad_current_av += 1749;
 					ad_current_av *= 1000;
 					ad_current_av /= 286;
@@ -1490,7 +1477,8 @@ int main(void){
 					#else					
 					ad_current_av += 169;
 					ad_current_av *= 100;
-					ad_current_av /= 75;					
+					ad_current_av /= 75;
+					ad_current_av += 18;				
 					#endif
 					
 					power_av = (ad_current_av * ad_voltage_av) / 10000;
@@ -1504,7 +1492,7 @@ int main(void){
 			}
 		}
 	
-		//Counter from TCC1
+		//cnt_tm is incremented from software TCC1 counts. This should happen ~ each 220 ms.
 		if (cnt_tm > 15){
 			cnt_tm = 0;
 			
@@ -1514,34 +1502,29 @@ int main(void){
 					if (throttle_tick < 20){
 						throttle_tick++;
 					}else{
-						throttle_cruise = true;
+						//throttle_cruise = true; //Removed it for the time being.
 					}
 				}				
 			}
 			
-			//test
-			//pwm_dec(5);
-			testvalue-=5;
-			
+			//Reset these?		
 			ad_currentmin = 9999;
-			ad_currentmax = -9999;
+			ad_currentmax = -9999;			
 			
-			
-			
-			
+			//Startup is set... when we've just started.
 			if (startup){
-				startup--;
-				
+				startup--;				
 				if (startup == 0){
 					//Clear any status flag:
 					//status_clear();
 					//Give it a nudge.
 					//commute_allowed = true;
+					pwm_less(250);
 				}
 			}else{
 				status_clear();
-			}
-			
+				
+			}			
 		}
 		
 		//Set fault flags:
@@ -1595,7 +1578,8 @@ ISR(TCD0_OVF_vect){
 	}
 }
 
-void pwm_dec(uint8_t by){
+
+void pwm_more(uint8_t by){
 	#if((HARDWARE_VER == HW_BLDC_REV1)||(HARDWARE_VER == HW_BLDC_REV0))
 	if (pwm > pwm_set_min){
 		if ((pwm-pwm_set_min) < by){
@@ -1619,7 +1603,7 @@ void pwm_dec(uint8_t by){
 	#endif
 }
 
-void pwm_inc(uint8_t by){
+void pwm_less(uint8_t by){
 	#if((HARDWARE_VER == HW_BLDC_REV1)||(HARDWARE_VER == HW_BLDC_REV0))
 	if (pwm < pwm_set_max){
 		if ((pwm_set_max-pwm) < by){
