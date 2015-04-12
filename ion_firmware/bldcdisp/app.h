@@ -70,6 +70,7 @@ struct settings_t{
 	uint16_t uvcal;
 	uint16_t ovcal;
 	uint16_t tempcal;
+	uint8_t  straingain;
 };
 
 extern settings_t eepsettings;

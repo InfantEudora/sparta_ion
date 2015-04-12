@@ -147,6 +147,8 @@ int32_t ad_strain_av = 500;		//Center around 500.
 int16_t strain_min = 500;		//Self calibrating...
 int16_t strain_max = 500;
 
+uint8_t strain_gain = 2;		//Gain factor in throttle.
+
 //If the strain signal registered, how long it should be on for.
 uint16_t strain_cnt = 0;
 
@@ -820,6 +822,8 @@ int main(void){
 	
 	//Apply settings...
 	strain_threshhold = eepsettings.straincal;
+	display.function_val5 = eepsettings.straingain;
+	strain_gain = eepsettings.straingain;
 
 	//Startup hall state.
 	hall_state = 0x04;
@@ -835,7 +839,7 @@ int main(void){
 	display.function_val1 = 2;
 	display.function_val2 = 5;
 	*/
-	display.function_val1 = 2;
+	//display.function_val1 = 2;
 	
 	uint8_t cnt_tm = 0;		//Used by TCC1
 	uint8_t poll_cnt = 0;	//Used for polling the display.	
@@ -1120,22 +1124,19 @@ int main(void){
 						}
 					}
 					
-					if (use_pedalassist) {						
-						if (ad_strain_av > highestforce){
-							highestforce  = ad_strain_av;
-						}
-						if (ad_strain_av < lowestforce){
-							lowestforce = ad_strain_av;
-						}
-						
-						//Compute 
+					if (use_pedalassist){
+						//Compute amount of throttle 0-100% from strain signal
 						pedal_signal_prev = pedal_signal;
-						uint8_t pedal_new = 0;
+						uint16_t pedal_new = 0;
 						
 						if (ad_strain_av > strain_threshhold){
 							//Get the pedal value.
 							if (ad_strain_av-strain_threshhold < 100){
 								pedal_new = ad_strain_av-strain_threshhold;
+								pedal_new *= strain_gain;
+								if (pedal_new > 100){
+									pedal_new = 100;
+								}
 							}else{
 								pedal_new = 100;
 							}
@@ -1317,6 +1318,8 @@ int main(void){
 				throttle_override = 0;
 			}
 			#endif
+
+
 			
 			//Startup from standstill			
 			if (throttle && (speed == 0)){
@@ -1469,6 +1472,9 @@ int main(void){
 					display.value1 = ad_strain_av;// ad_strain_av - 2000;
 					display.value2 = strain_min;// ad_strain_av - 2000;
 					display.value3 = strain_max;// ad_strain_av - 2000;
+
+					//Load the strain gain value:
+					strain_gain = display.function_val5+1;
 					#endif
 					
 					
