@@ -9214,7 +9214,7 @@ Source: http://www.semicon.toshiba.co.jp/td/en/Opto/Photocoupler/en_20050928_TLP
 <part name="GND20" library="supply1" deviceset="GND" device=""/>
 <part name="R30" library="rcl" deviceset="R-EU_" device="M0805" value="1k"/>
 <part name="R31" library="rcl" deviceset="R-EU_" device="M0805" value="10R"/>
-<part name="R32" library="rcl" deviceset="R-EU_" device="M0805" value="1k"/>
+<part name="R32" library="rcl" deviceset="R-EU_" device="M0805" value="4k7"/>
 <part name="R33" library="rcl" deviceset="R-EU_" device="M0805" value="390k"/>
 <part name="R34" library="rcl" deviceset="R-EU_" device="M0805" value="100k"/>
 <part name="R35" library="rcl" deviceset="R-EU_" device="M0805" value="1k"/>
@@ -9271,7 +9271,7 @@ Source: http://www.semicon.toshiba.co.jp/td/en/Opto/Photocoupler/en_20050928_TLP
 <text x="314.96" y="205.74" size="1.778" layer="97">To start board.</text>
 <text x="205.74" y="144.78" size="1.778" layer="97">For one wire: Only use PIN1.</text>
 <text x="205.74" y="142.24" size="1.778" layer="97">For start board: 2 wires, host has an opto output.</text>
-<text x="12.7" y="312.42" size="1.778" layer="97">Mount 1k resistor for 5V data standalone</text>
+<text x="12.7" y="312.42" size="1.778" layer="97">Mount 1k ~ 4.7k pullup resistor for 5V data standalone</text>
 <text x="10.16" y="101.6" size="1.778" layer="97" rot="R180">Select 5V IO or 3V3 IO</text>
 <text x="284.48" y="195.58" size="1.778" layer="97">EDIT: Do this with 2 NPN's instead of sinking.</text>
 </plain>

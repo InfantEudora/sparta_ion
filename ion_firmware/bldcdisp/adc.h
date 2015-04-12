@@ -18,6 +18,6 @@ void adc_init_differential_gain(uint8_t ref,uint8_t gain, uint8_t pos_channel);
 void adc_init_temperature(void);
 void adc_init_strain(uint8_t ref);
 
-uint16_t adc_getsample(void);
+int16_t adc_getsample(void);
 
 #endif /* ADC_H_ */

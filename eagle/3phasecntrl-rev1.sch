@@ -19242,6 +19242,7 @@ Source: http://cache.national.com/ds/LM/LM340.pdf</description>
 <text x="187.96" y="106.68" size="1.778" layer="97">Halls moved to digital inputs. Internally pulled up, hall sensors sink.</text>
 <text x="345.44" y="236.22" size="1.778" layer="97">100k = 12V DATA BUS</text>
 <text x="345.44" y="231.14" size="1.778" layer="97">47k = 24V DATA BUS</text>
+<text x="243.84" y="40.64" size="1.778" layer="97">Change this to AVCC</text>
 </plain>
 <instances>
 <instance part="PWM" gate="1" x="281.94" y="27.94" rot="R180"/>

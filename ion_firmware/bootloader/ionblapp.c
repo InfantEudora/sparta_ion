@@ -65,6 +65,9 @@ void bootloader_init(void);
 uint16_t read_app_crc(uint16_t);
 void app_execute_firmware(void);
 
+volatile bool bootloading = false;
+volatile uint16_t crcapp = 0;	
+
 void clock_switch32M(void){
 	/*Setup clock to run from Internal 32MHz oscillator.*/
 	OSC.CTRL |= OSC_RC32MEN_bm;
@@ -83,9 +86,12 @@ void bootloader_init(void){
 	clock_switch32M();
 	
 	//Set the interrupts, enable low-prio interrupts.
-	//The IO vector remap bit is protected, allow acces for 4 clock cycles.
+	//The IO vector remap bit is protected, allow access for 4 clock cycles.
+	cli();
 	CCP = CCP_IOREG_gc;
-	PMIC.CTRL = PMIC_LOLVLEN_bm | PMIC_MEDLVLEN_bm| PMIC_HILVLEN_bm | PMIC_RREN_bm | PMIC_IVSEL_bm;
+	PMIC.CTRL = PMIC_LOLVLEN_bm | PMIC_MEDLVLEN_bm| PMIC_HILVLEN_bm | PMIC_RREN_bm;
+	CCP = CCP_IOREG_gc;
+	PMIC.CTRL |= PMIC_IVSEL_bm;
 	
 	//Init uart hardware
 	uarthw_init();
@@ -129,6 +135,10 @@ net_error_e _PREBOOT_SECTION app_handlemessage(uart_s* uart, uint8_t* data,msg_i
 				
 				message_append_tofifo(uart->txfifo,binfo,binfosize,CMD_BOOT_INFO|MASK_CMD_ACK,hwinfo.boot_address);
 				uart->write_start();
+				
+				//Wait for a block:
+				bootloading = true;
+				bootstate.state = BOOT_WAIT_WRITE;
 				return NET_ERR_NONE;
 			}			
 		}
@@ -139,6 +149,7 @@ net_error_e _PREBOOT_SECTION app_handlemessage(uart_s* uart, uint8_t* data,msg_i
 				message_append_tofifo(uart->txfifo,NULL,0,CMD_BOOT_START|MASK_CMD_ACK,hwinfo.boot_address);
 				uart->write_start();
 				//Wait for a block:
+				bootloading = true;
 				bootstate.state = BOOT_WAIT_WRITE;
 				return NET_ERR_NONE;
 			}else{
@@ -183,6 +194,7 @@ net_error_e _PREBOOT_SECTION app_handlemessage(uart_s* uart, uint8_t* data,msg_i
 				uint16_t appcrc = read_app_crc(fwinfo.size);
 				message_append_tofifo(uart->txfifo,(uint8_t*)&appcrc,2,CMD_BOOT_CHECK|MASK_CMD_ACK,hwinfo.boot_address);
 				uart->write_start();
+				return NET_ERR_NONE;
 				//_delay_ms(200);
 			}
 		}
@@ -249,7 +261,7 @@ int main(void){
 	//Clear all values:
 	memset(&hwinfo,0,sizeof(hwinfo_t));
 	memset(&fwinfo,0,sizeof(fwinfo_t));
-	fwinfo.crc = 0xffff;
+	fwinfo.crc = 0x0000;
 	/*hwinfo.boot_address = 0;
 	hwinfo.dev_address = 0;
 	hwinfo.version = 0;
@@ -262,20 +274,23 @@ int main(void){
 	eemem_read_block(EEMEM_MAGIC_HEADER_HARDWARE,(uint8_t*)&hwinfo, sizeof(hwinfo), EEBLOCK_HARDWARE);
 	eemem_read_block(EEMEM_MAGIC_HEADER_FIRMWARE,(uint8_t*)&fwinfo, sizeof(fwinfo), EEBLOCK_FIRMWARE);
 	
-	//Calculate the CRC of the application currently stored in flash.
-	uint16_t crcapp = 0;	
+	//Are we going to stay in bootloader?
+	bootloading = false;
+	
+	//Calculate the CRC of the application currently stored in flash.	
 	if (fwinfo.size > 0){
 		//Check application
 		crcapp = read_app_crc(fwinfo.size);		
-	}	
+	}else{
+		bootloading = true;
+	}
 	
 	//Init boot state.
 	memset(&bootstate,0,sizeof(bootstate));
 	bootstate.state = BOOT_WAIT_ACK;
 	
 	//Timout before starting applcaition
-	uint16_t timeout = 30;
-	bool bootloading = false;
+	uint16_t timeout = 30;	
 
 	//Bootloader:
 	while(1){
@@ -303,29 +318,31 @@ int main(void){
 				}
 			}		
 		}else{
-			//No message but fifo is flodded with garbage: Clear it.
+			//No message but fifo is flooded with garbage: Clear it.
 			if (fifo_free(uartbus->rxfifo) == 0){
 				fifo_clear(uartbus->rxfifo);
 			}
 		}
 		
-		if ((timeout == 0) && (!bootloading)){
-			//No one has started the bootload process:
-			if (crcapp == fwinfo.crc){
-				//Application in memory is valid.
-				SP_WaitForSPM();
-				SP_LockSPM();
-				cli();
+		if (bootloading == false){
+			if (timeout == 0){
+				//No one has started the bootload process:
+				if (crcapp == fwinfo.crc){
+					//Application in memory is valid.
+					SP_WaitForSPM();
+					SP_LockSPM();
+					cli();
 
-				//Move interrupt vector table to application.
-				CCP = CCP_IOREG_gc;
-				PMIC.CTRL &= ~PMIC_IVSEL_bm; 
-				//Run the application.
-				asm("jmp 0x0000");
-			}else{
-				timeout = 1000;
-				//Stay in the bootloader forever.
-			}
-		}				
+					//Move interrupt vector table to application.
+					CCP = CCP_IOREG_gc;
+					PMIC.CTRL &= ~PMIC_IVSEL_bm; 
+					//Run the application.
+					asm("jmp 0x0000");
+				}else{
+					timeout = 1000;
+					//Stay in the bootloader forever.
+				}
+			}	
+		}
 	}
 }

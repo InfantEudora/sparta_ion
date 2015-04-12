@@ -1,0 +1,26 @@
+Partlist exported from E:/IDE-E/Mijn Documenten/Projects/code/sparta_ion.git/eagle/ftdi.sch at 4/8/2015 5:38:11 PM
+
+Assembly variant: 
+
+Qty Value        Device            Parts             Farnell FarnellAlt1
+1                ADAFRUIT_USBMINIB USB                                  
+2                JP1E              XIN, XOUT                            
+2                MA03-1            X1, X2                               
+2                MA04-1            SV1, SV2                             
+1                SJ                SJ1                                  
+1                SJ2W              SJ2                                  
+4   1k           R-EU_M0805        R3, R30, R32, R35 2078954            
+1   2R2          R-EU_M0805        F1                2078937            
+1   4.7u/16V     C-EUC0805K        C1                1759427            
+1   4k7          R-EU_M0805        R2                2074469            
+2   10R          R-EU_M0805        R31, R36          2073604            
+1   100k         R-EU_M0805        R34               2073608            
+3   100n         C-EUC0805K        C2, C3, C45       2320839            
+1   390k         R-EU_M0805        R33               9234322            
+3   470R         R-EU_M0805        R1, R8, R67       2073777            
+3   BC847        BC847             T1, T5, T6        1081232            
+1   EL3H7(TA)-VG TLP283            OK1                                  
+1   FT232RL      FT232RL           IC1               1146032            
+1   GREEN        LEDCHIPLED_0805   TX                2290331            
+1   RED          LEDCHIPLED_0805   RX                1318244            
+1   SN65HVD1780  SN75176BD         U1                                   

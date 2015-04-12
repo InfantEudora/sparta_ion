@@ -135,13 +135,20 @@ uint8_t startup = 10;
 #define BACKWARD 1
 uint8_t direction = BACKWARD;		//This is actually forward....
 
+//Calibration value for strain sensor.
+uint16_t strain_threshhold = 200;	
+uint8_t strain_cal_inc = 1;		
 
-uint16_t strain_threshhold = 200;	//Calibration value for strain sensor.
-uint8_t strain_cal_inc = 1;			
+//Strain sensor values.
 int32_t ad_strain = 0;
 int32_t ad_strain_sum = 0;
-int32_t ad_strain_av = 0;
-uint16_t strain_cnt = 0;			//If the strain registered, how long it should be on for.
+int32_t ad_strain_av = 500;		//Center around 500.
+
+int16_t strain_min = 500;		//Self calibrating...
+int16_t strain_max = 500;
+
+//If the strain signal registered, how long it should be on for.
+uint16_t strain_cnt = 0;
 
 uint32_t ad_temp_ref = 0;			//Factory reference.
 uint32_t ad_temp = 0;
@@ -461,7 +468,7 @@ void get_measurements(void){
 		for (uint16_t i=0;i<ad_max_samples;i++){
 			adc_init_single_ended(REF_3V3,ADC_CH_MUXPOS_PIN7_gc); //Bat Voltage.
 			usample += adc_getsample();
-			adc_init_strain(REF_3V3); //Strain Sensor.
+			adc_init_strain(REF_1V0); //Strain Sensor.
 			ssample += adc_getsample();	
 			adc_init_temperature();//Internal temp
 			bsample += adc_getsample();	
@@ -484,11 +491,11 @@ void get_measurements(void){
 	
 	//Convert 'em back to 12 bits.
 	ad_voltage = usample/(uint32_t)ad_max_samples;	
-	ad_current = isample/(int32_t)ad_max_samples;
+	ad_current = isample;
 
 	//Hardware specific inputs.
 	#if(HARDWARE_VER == HW_CTRL_REV1)		
-		ad_strain = (int32_t)ssample/(int32_t)ad_max_samples;		
+		ad_strain = (int32_t)ssample;		
 		ad_strain_sum += ad_strain;
 		
 		ad_temp = bsample/ad_max_samples;
@@ -505,7 +512,7 @@ void get_measurements(void){
 	
 	//Per commutation current.
 	ad_current_regcnt++;
-	ad_current_regsum += ad_current;
+	ad_current_regsum += (ad_current/(int32_t)ad_max_samples);
 }
 
 
@@ -825,9 +832,10 @@ int main(void){
 	/*
 	motor.mode = 1;
 	display.road_legal = false;
-	display.function_val1 = 4;
+	display.function_val1 = 2;
 	display.function_val2 = 5;
 	*/
+	display.function_val1 = 2;
 	
 	uint8_t cnt_tm = 0;		//Used by TCC1
 	uint8_t poll_cnt = 0;	//Used for polling the display.	
@@ -1392,17 +1400,38 @@ int main(void){
 					ad_voltage_sum = 0;
 						
 					//And current.
-					ad_current_av = ad_current_sum / meas_cnt;
+					ad_current_av = ad_current_sum / meas_cnt / (int32_t)ad_max_samples;
 					ad_current_sum = 0;
 
 					//Strain, if we have it:
 					#if(HARDWARE_HAS_STRAIN)
 					//Running average:
-					int32_t strain_val = ad_strain_sum / meas_cnt;
-					strain_val /= 100;
+					int32_t strain_val = (int32_t)ad_strain_sum / (int32_t)meas_cnt /(int32_t)ad_max_samples;
 					
+					//It should wobble around 0. More negative is more force.
+					//Center it around 500.
+					strain_val = 500 - (strain_val);
+					
+					//Another running average.
 					ad_strain_av += strain_val;
 					ad_strain_av /= 2;
+					
+					
+					//Peak detection:
+					if (ad_strain_av < strain_min){
+						strain_min = ad_strain_av;	
+						if (strain_min < 0){
+							strain_min = 0;
+						}					
+					}
+					if (ad_strain_av > strain_max){
+						strain_max = ad_strain_av;						
+						if (strain_max >999){
+							strain_max = 999;
+						}					
+					}
+
+
 					
 					//ad_strain_av = meas_cnt;
 					ad_strain_sum = 0;
@@ -1438,11 +1467,12 @@ int main(void){
 					
 					//motor.current = ad_strain_av;
 					display.value1 = ad_strain_av;// ad_strain_av - 2000;
-					display.value2 = highestforce;// ad_strain_av - 2000;
+					display.value2 = strain_min;// ad_strain_av - 2000;
+					display.value3 = strain_max;// ad_strain_av - 2000;
 					#endif
 					
-					display.value3 = pwm;
-					display.value4 = should_freewheel;
+					
+					display.value4 = pwm;
 					
 					//Temperature
 					ad_temp_av = ad_temp_sum / meas_cnt;
@@ -1473,7 +1503,7 @@ int main(void){
 					ad_current_av += 1749;
 					ad_current_av *= 1000;
 					ad_current_av /= 286;
-					ad_current_av -= 34;
+					ad_current_av -= 28;
 					#else					
 					ad_current_av += 169;
 					ad_current_av *= 100;
@@ -1495,6 +1525,10 @@ int main(void){
 		//cnt_tm is incremented from software TCC1 counts. This should happen ~ each 220 ms.
 		if (cnt_tm > 15){
 			cnt_tm = 0;
+
+			if (strain_min < ad_strain_av){
+				strain_min++;
+			}
 			
 			//Increase throttle tick, for cruise control.
 			if ((use_throttle)&& (!use_brake)){
@@ -1516,14 +1550,13 @@ int main(void){
 				startup--;				
 				if (startup == 0){
 					//Clear any status flag:
-					//status_clear();
+					status_clear();
 					//Give it a nudge.
 					//commute_allowed = true;
 					pwm_less(250);
 				}
 			}else{
-				status_clear();
-				
+				status_clear();				
 			}			
 		}
 		

@@ -51,7 +51,7 @@ void adc_init_strain(uint8_t ref){
 	ADCA.CTRLB = 0x10 | ADC_RESOLUTION_12BIT_gc;         // 12 bit signed conversion (pos 11bits)
 	ADCA.REFCTRL = ref | 0x02;           // internal 1V bandgap reference
 	ADCA.PRESCALER = ADC_PRESCALER_DIV16_gc;            // 32MHz/16 = 2MHz AD clock.
-	ADCA.CH0.CTRL = ADC_CH_INPUTMODE_DIFFWGAIN_gc;            // differential, gain	
+	ADCA.CH0.CTRL = ADC_CH_INPUTMODE_DIFFWGAIN_gc | (6<<2);            // differential, stupid amount of gain	
 	ADCA.CH0.MUXCTRL = ADC_CH_MUXPOS_PIN1_gc | ADC_CH_MUXNEG_PIN4_gc; //Difference between pin 1 and 4.
 }
 
@@ -88,8 +88,8 @@ void adc_init_differential_gain(uint8_t ref,uint8_t gain, uint8_t pos_channel){
 	
 }
 
-uint16_t adc_getsample(void){
-	uint16_t result;
+int16_t adc_getsample(void){
+	int16_t result;
 
 	ADCA.CH0.CTRL |= ADC_CH_START_bm; // start conversion on channel 0
 	

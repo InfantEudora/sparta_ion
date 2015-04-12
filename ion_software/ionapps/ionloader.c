@@ -135,8 +135,12 @@ void app_prepare_bootload(uint8_t start_addr){
 	//Send a boot info:
 	bootstate.address = start_addr;
 
-	bool resp_motor = false;
 	bool resp_button = false;
+	if (start_addr == 4){
+		resp_button = true;
+	}
+
+	bool resp_motor = false;	
 
 	while(1){
 		//Read an arbitrary number of bytes
