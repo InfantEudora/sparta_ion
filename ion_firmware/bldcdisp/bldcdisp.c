@@ -1521,6 +1521,13 @@ int main(void){
 									
 					poll_cnt = 0;
 					#if(OPT_DISPLAY == FW_DISPLAY_MASTER)
+
+					//Goto mode 0:
+					if (status){
+						motor.mode = 0;
+						
+					}
+
 					bus_display_update(&bus);
 					#endif
 					//motor.mode = 1;
