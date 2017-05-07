@@ -59,7 +59,7 @@ bool flagsave = false;			//Set when settings need to be saved
 settings_t eepsettings;			//The settings.
 
 bool usehall = true;
-bool use_throttle = false;		//Apply throttle.
+bool use_throttle = true;		//Apply throttle.
 bool use_pedalassist = true;		//Apply throttle.
 
 bool use_brake = false;			//Apply brake

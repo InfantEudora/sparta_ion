@@ -49,6 +49,8 @@ struct termstate_s{
 
 termstate_s user_input;
 
+//Name of the uart interface we'll use
+char* ifname = "/dev/ttyS41";
 
 
 #define BOOT_WAIT_REQ	0
@@ -300,7 +302,7 @@ void parse_userinput(uint8_t *buf){
 bool app_openuart(void){
 	//Open a uart
 	uart_init(uart);
-	uart_setdevice(uart,"/dev/ttyS41");
+	uart_setdevice(uart,ifname);
 	if (!uart_configure(uart,B19200,false)){
 		//Failed to open.
 		printf_clr(CLR_YELLOW,"Try a different tty:?\n");
@@ -732,9 +734,16 @@ int random_bytes(void *dst, size_t n){
 	return 1;
 }
 
-int main(int argc, char *argv[]){
+void parse_args(int argc, char* argv[]){
+	if (argc > 1){
+		ifname = strdup(argv[1]);
+	}
+}
 
+int main(int argc, char *argv[]){
 	term_clear();
+
+	parse_args(argc,argv);
 
 	//Test
 	parse_userinput("open");
