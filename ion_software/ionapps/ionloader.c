@@ -61,13 +61,14 @@ termstate_s user_input;
 
 struct {
 	uint8_t state;			//State we are in.
-	uint8_t address;		//Address we are writing to.	
+	uint8_t address;		//Address we are writing to.
 	uint16_t block;			//Block we are working on.
 	uint16_t offset;		//Chunk of block.
 	uint16_t crc;			//CRC of current block.
 	uint32_t firmwareoffs;	//Firmwareoffset.
-	uint32_t size;			//Firmware total size.	
+	uint32_t size;			//Firmware total size.
 	uint32_t todo;			//Firmware total size to do
+	uint16_t retries;		//Amount of retries
 }bootstate;
 
 typedef struct hwinfo_t hwinfo_t;
@@ -104,7 +105,7 @@ void app_init_bootstate(void){
 
 void app_print_info(void){
 	printf("Firmware loader for OpenSource Sparta Ion Hardware. You can type the following:\n\n");
-	
+
 	printf("start        - Put all devices in bootload mode.\n");
 	printf("startmotor   - Put only the motor in bootload mode. \n");
 	printf("loadbutton   - Load button PCB. (firmware/button.hex)\n");
@@ -140,13 +141,13 @@ void app_prepare_bootload(uint8_t start_addr){
 		resp_button = true;
 	}
 
-	bool resp_motor = false;	
+	bool resp_motor = false;
 
 	while(1){
 		//Read an arbitrary number of bytes
 		int n = uart_read_start(uart,60);
 
-		
+
 		//Message?
 		bool message_found = false;
 		while (messages_infifo(&rxfifo)){
@@ -158,12 +159,12 @@ void app_prepare_bootload(uint8_t start_addr){
 				usleep(20000);
 			}else{
 				//What should we do with the message?
-				
+
 				bool ack = ((info.cmd & MASK_CMD_ACK) == MASK_CMD_ACK);
 				uint8_t cmd = info.cmd & MASK_CMD;
 				//Went ok.
 				debprintf(CLR_GREEN,0,"Parse OK: addr %u cmd: %02X ACK: %u\n",info.address,cmd,ack);
-				
+
 				if ((cmd == CMD_BOOT_INFO) && ack){
 
 					if (info.address == 3){
@@ -180,7 +181,7 @@ void app_prepare_bootload(uint8_t start_addr){
 		}
 
 		if (!message_found){
-			printf_clr(CLR_YELLOW,"No message.\n");	
+			printf_clr(CLR_YELLOW,"No message.\n");
 			if (fifo_free(&rxfifo) == 0){
 				fifo_clear(&rxfifo);
 				printf("Cleared fifo\n");
@@ -200,7 +201,7 @@ void app_prepare_bootload(uint8_t start_addr){
 }
 
 void parse_userinput(uint8_t *buf){
-	uint8_t input[256] = {0};	
+	uint8_t input[256] = {0};
 	int i1;
 
 	//These work everywhere.
@@ -229,7 +230,7 @@ void parse_userinput(uint8_t *buf){
 		}else{
 			printf("Unable to find hex file.\n");
 			return;
-		}		
+		}
 		return;
 	}else if (strcmp(input,"motorhex") == 0){
 		//Opening HEX file
@@ -247,7 +248,7 @@ void parse_userinput(uint8_t *buf){
 		}else{
 			printf("Unable to find hex file.\n");
 			return;
-		}		
+		}
 		return;
 	}else if (strcmp(input,"loadbutton") == 0){
 		//Opening HEX file
@@ -265,7 +266,7 @@ void parse_userinput(uint8_t *buf){
 		}else{
 			printf("Unable to find hex file.\n");
 			return;
-		}		
+		}
 		return;
 	}else if (strcmp(input,"start") == 0){
 		app_prepare_bootload(3);
@@ -293,7 +294,7 @@ void parse_userinput(uint8_t *buf){
 		app_openuart();
 		return;
 	}
-	printf_clr(CLR_YELLOW,"Unknown command.\n");	
+	printf_clr(CLR_YELLOW,"Unknown command.\n");
 }
 
 bool app_openuart(void){
@@ -306,13 +307,13 @@ bool app_openuart(void){
 		uint8_t newname[64];
 		fgets(newname,64,stdin);
 		//Remove \n
-		int len = strlen(newname);	
-		newname[len-1] = 0;		
+		int len = strlen(newname);
+		newname[len-1] = 0;
 
 		uart_setdevice(uart,newname);
 		if (!uart_configure(uart,B19200,false)){
 			printf_clr(CLR_RED,"Nope. Please restart with a correct tty.\n");
-			
+
 		}
 	}
 
@@ -328,7 +329,7 @@ bool app_openuart(void){
 	stream->write_start = &stream_writestart;
 	stream->write_stop = &stream_writestop;
 
-	
+
 }
 
 
@@ -349,21 +350,21 @@ void term_handle_character(termstate_s* term, char* c){
 		}else if ((*c == 8)||(*c == 127)) { //Bullshit character
 			if (term->inpptr > 0){
 				term->inpptr--;
-				term->buffer[term->inpptr] = 0;						
+				term->buffer[term->inpptr] = 0;
 			}
 		}else if ((*c == '\r')||(*c == '\n')) {
 			//term->buffer[term->inpptr++] = 0;
 			//printf("\x1b[%i;%iH",x,y);
-			//fflush(stdout);	
+			//fflush(stdout);
 			linebreak = true;
-			
+
 			//HANDLE IT!
-			
+
 			printf("\r\n");
 			parse_userinput(term->buffer);
 			memset(term->buffer,0,sizeof(term->buffer));
 			term->inpptr = 0;
-			
+
 
 			term->inpptr = 0;
 			term->buffer[term->inpptr] = 0;
@@ -386,20 +387,20 @@ void term_handle_character(termstate_s* term, char* c){
 			//show_help();
 		}
 	}else if (term->state == STATE_CSI){
-		
+
 		/*if (*c == 'A'){ //Up arrow
 			if (menu==MENU_GARAGE){
 				garage_input(INP_DOWN);
-			}else{	
+			}else{
 				//Load previous command
 				cmd_hist_up(input);
 				term->inpptr = strnlen(input,MAX_UI_BUFFERSIZE);
-			}					
+			}
 		}else if (*c == 'B'){ //Down arrow
 			if (menu==MENU_GARAGE){
 				garage_input(INP_UP);
 			}
-		}else if (*c == 'C'){//Right					
+		}else if (*c == 'C'){//Right
 			if (menu==MENU_GARAGE){
 				garage_input(INP_RIGHT);
 			}
@@ -443,20 +444,20 @@ void select_term(void){
 	}
 
 	char ch[1];
-	
+
 	fd_set rcvfds;
-	struct timeval timeout;	
+	struct timeval timeout;
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 50*1000; //Convert to ms
 
 
 	while(1){
-		FD_ZERO(&rcvfds);		
-		FD_SET(STDIN, &rcvfds);	
+		FD_ZERO(&rcvfds);
+		FD_SET(STDIN, &rcvfds);
 
 		int n = select(STDIN + 1, &rcvfds, NULL, NULL, &timeout);
 
-		//Fix the timeout 
+		//Fix the timeout
 		timeout.tv_usec = 50*1000; //Convert to ms
 
 		if(n>0){
@@ -467,7 +468,7 @@ void select_term(void){
 				printf("Failed to read from stdin.\n");
 				break;
 			}else if (rc == 0){
-				break;				
+				break;
 			}else{
 				//Reading went ok:
 				//write(STDOUT,ch,1);
@@ -478,34 +479,12 @@ void select_term(void){
 			//There is more...
 		}else if(n == 0){
 			//printf("STDIN timed out\n");
-			break;			
+			break;
 		}else{ //-1
 			//It's broken:
 			printf("FD to STDIN is broken.\n");
 			break;
 		}
-
-		//Print it in a bar of some kind:
-		//pthread_mutex_lock(&console_lock);
-		//save_cursor();
-
-		//update_head();
-		
-		//Jump to the bottom of the screen:
-		//printf("\x1b[%i;0H",term_size.ws_row - 2);
-		//Ansi voodoo
-		/*
-		printf("\x1b[0J");
-		printf("\x1b[32;100m");	
-		printf("\x1b[2K");		//Clear line
-		printf("\x1b[37;100m");	
-		printf("> ");
-		printf("\x1b[32;100m");	
-		*/
-		//Print the shit we just typed:
-		//printf("cmd: %s",input);		
-
-		
 	}
 
 	//Set it.
@@ -513,11 +492,21 @@ void select_term(void){
 		printf("tcsetattr failed\n");
 		return;
 	}
+}
 
+void app_retry_chunk(void){
+	//Wrap 64 bytes back:
+	if (bootstate.offset >= 64){
+		bootstate.offset-= 64;
+		bootstate.todo += 64;
+		bootstate.firmwareoffs = (bootstate.block*256) + bootstate.offset;
+		printf_clr(CLR_YELLOW,"Retrying at %8lu in block %u. Remaining: %8lu/%lu\n",bootstate.offset,bootstate.block,bootstate.todo,bootstate.size);
+		app_write_nextchunk();
+	}
 }
 
 
-void app_write_nextchunk(void){	
+void app_write_nextchunk(void){
 	printf("Writing at %8lu in block %u. Remaining: %8lu/%lu\n",bootstate.offset,bootstate.block,bootstate.todo,bootstate.size);
 	if (bootstate.todo >= 64){
 		bootstate.todo-= 64;
@@ -529,8 +518,6 @@ void app_write_nextchunk(void){
 	uint8_t data[68];
 	memset(data,0,68);
 
-	
-
 	uint8_t bootdatalen = 64;
 	uint8_t datalen = 68;
 
@@ -541,11 +528,7 @@ void app_write_nextchunk(void){
 
 	message_append_tofifo(uart->txfifo,data,datalen,CMD_BOOT_WRITE,bootstate.address);
 	uart_write_start(uart);
-
-	
 	bootstate.offset += 64;
-	
-
 	bootstate.firmwareoffs = (bootstate.block*256) + bootstate.offset;
 }
 
@@ -621,8 +604,6 @@ net_error_e app_handlemessage(uint8_t* data,msg_info_t* info){
 		case CMD_BOOT_WRITE:
 			//Ack from device:
 			if ((bootstate.state == BOOT_WRITE) && (ack)){
-				
-
 				if (bootstate.todo){
 					debprintf(CLR_CYAN,0,"Device received block. Writing next at %hu.\n",bootstate.offset);
 					if (bootstate.offset >= 256){
@@ -646,7 +627,7 @@ net_error_e app_handlemessage(uint8_t* data,msg_info_t* info){
 
 						//Goto next block:
 						if (bootstate.block < 400){ //Limit for testing...
-							bootstate.block++;					
+							bootstate.block++;
 							bootstate.offset = 0;
 						}else{
 							return NET_ERR_NONE;
@@ -657,7 +638,7 @@ net_error_e app_handlemessage(uint8_t* data,msg_info_t* info){
 				}else{
 					//Done?
 					debprintf(CLR_CYAN,0,"Done writing firmware. Sending BOOT_CHECK.\n",info->address);
-					uint16_t appsize = filefw.binary_size;					
+					uint16_t appsize = filefw.binary_size;
 					message_append_tofifo(uart->txfifo,(uint8_t*)&appsize,2,CMD_BOOT_CHECK,bootstate.address);
 					uart_write_start(uart);
 					bootstate.state = BOOT_CHECK;
@@ -710,7 +691,7 @@ net_error_e app_handlemessage(uint8_t* data,msg_info_t* info){
 
 //Parse a message on stream index's rxfifo.
 net_error_e app_parsemessage(fifo_t* fifo){
-	
+
 	net_error_e err;
 	//Temp location for data:
 	uint8_t msgdata[128];
@@ -725,14 +706,15 @@ net_error_e app_parsemessage(fifo_t* fifo){
 	}else{
 		//What should we do with the message?
 		uint8_t cmd = (info.cmd & MASK_CMD);
+		uint8_t ack = (info.cmd & MASK_CMD_ACK);
 		//Went ok.
-		debprintf(CLR_GREEN,0,"Parse OK: addr %u cmd: %u\n",info.address,cmd);
-		
-		
+		debprintf(CLR_GREEN,0,"Parse OK: addr %2u cmd: %2u ack: %2u\n",info.address,cmd,ack);
+
+
 		//Does a commandhadler exist?
 		return app_handlemessage(msgdata,&info);
 
-		
+
 	}
 	return NET_ERR_UNDEFINED;
 
@@ -741,7 +723,7 @@ net_error_e app_parsemessage(fifo_t* fifo){
 #define RANDSRC "/dev/urandom"
 int random_bytes(void *dst, size_t n){
 	FILE *f = fopen(RANDSRC, "rb");
-	
+
 	size_t r = fread(dst, n, 1, f);
 	fclose(f);
 	if (r < 1) {
@@ -751,7 +733,7 @@ int random_bytes(void *dst, size_t n){
 }
 
 int main(int argc, char *argv[]){
-	
+
 	term_clear();
 
 	//Test
@@ -782,7 +764,7 @@ void app_get_info(uint8_t address){
 	int tries = 10;
 
 	while(tries--){
-		
+
 
 		//Read an arbitrary number of bytes
 		int n = uart_read_start(uart,20);
@@ -796,7 +778,7 @@ void app_get_info(uint8_t address){
 			//Parse and handle:
 			net_error_e ret = app_parsemessage(&rxfifo);
 			if (ret == NET_ERR_NONE){
-				printf_clr(CLR_GREEN,"MSG OK\n");			
+				printf_clr(CLR_GREEN,"MSG OK\n");
 			}else{
 				debprintf(CLR_RED,0,"Error: %04X.\n",ret);
 			}
@@ -811,7 +793,7 @@ void app_get_info(uint8_t address){
 				//	app_write_nextchunk();
 				}
 			}
-			
+
 		}
 
 		select_term();
@@ -829,7 +811,7 @@ void app_get_check(uint8_t address){
 	int tries = 10;
 
 	while(tries--){
-		
+
 
 		//Read an arbitrary number of bytes
 		int n = uart_read_start(uart,20);
@@ -842,7 +824,7 @@ void app_get_check(uint8_t address){
 			//Parse and handle:
 			net_error_e ret = app_parsemessage(&rxfifo);
 			if (ret == NET_ERR_NONE){
-				printf_clr(CLR_GREEN,"MSG OK\n");			
+				printf_clr(CLR_GREEN,"MSG OK\n");
 			}else{
 				debprintf(CLR_RED,0,"Error: %04X.\n",ret);
 			}
@@ -857,7 +839,7 @@ void app_get_check(uint8_t address){
 				//	app_write_nextchunk();
 				}
 			}
-			
+
 		}
 
 		select_term();
@@ -877,7 +859,7 @@ void app_load_firmware(uint8_t address){
 
 
 	while(1){
-		
+
 
 		//Read an arbitrary number of bytes
 		int n = uart_read_start(uart,20);
@@ -890,14 +872,19 @@ void app_load_firmware(uint8_t address){
 			//Parse and handle:
 			net_error_e ret = app_parsemessage(&rxfifo);
 			if (ret == NET_ERR_NONE){
-				printf_clr(CLR_GREEN,"MSG OK\n");	
-				timeouts  = 0;		
+				printf_clr(CLR_GREEN,"MSG OK\n");
+				timeouts  = 0;
 			}else{
 				debprintf(CLR_RED,0,"Error: %04X.\n",ret);
 			}
 		}else{
 			printf_clr(CLR_YELLOW,"No message.\n");
 			timeouts++;
+			if ((timeouts > 5) && (bootstate.retries < 500)){
+				timeouts = 0;
+				bootstate.retries++;
+				app_retry_chunk();
+			}
 
 			if (timeouts > 20){
 				printf("Timeout writing firmware.\n");

@@ -3,3 +3,9 @@
 *.hex
 *.d
 *.*#*
+*.srec
+*.mk
+*.map
+*.lss
+*.elf
+*.atsuo
