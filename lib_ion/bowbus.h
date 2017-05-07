@@ -1,6 +1,6 @@
 /*
-	Created: 6/23/2014 5:07:46 PM - Copyright (c) 
-	Author: D. Prins			
+	Created: 6/23/2014 5:07:46 PM - Copyright (c)
+	Author: D. Prins
 		Infant - infant.tweakblogs.net
 		mail: prinsje2004 at gmail
 
@@ -14,7 +14,7 @@
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-	
+
 	    This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -77,7 +77,7 @@
 //In the ditance bar,
 #define DISP_CHAR_NEGATIVE	10	//'-' character in distance
 #define DISP_CHAR_B_LOW		11	//'b' Lower case b character
-#define DISP_CHAR_CLEAR		12	//' ' Space, empty character. 
+#define DISP_CHAR_CLEAR		12	//' ' Space, empty character.
 #define DISP_CHAR_D_LOW		13	//'d' Lower case d.
 #define DISP_CHAR_E_UP		14	//'E' Upper case E
 #define DISP_CHAR_F_UP		15	//'F' Upper case F
@@ -91,18 +91,18 @@ typedef struct display_state_s display_state_s;
 
 struct bowbus_net_s{
 	uint16_t rx_buff_cnt;
-	uint8_t  rx_buff[RX_BUFF_MAX];	
+	uint8_t  rx_buff[RX_BUFF_MAX];
 	uint8_t  rx_state;
-	
+
 	uint16_t tx_buff_size; //Size of data
-	uint16_t tx_buff_cnt; //Send 'pointer'. 
+	uint16_t tx_buff_cnt; //Send 'pointer'.
 	uint8_t  tx_buff[TX_BUFF_MAX];
 	uint8_t  tx_state;
-	
+
 	bool	message_end;
-	
+
 	bool	 new_mesage;
-	uint8_t  msg_buff[TX_BUFF_MAX];	
+	uint8_t  msg_buff[TX_BUFF_MAX];
 	uint8_t  msg_len;
 };
 
@@ -123,10 +123,10 @@ struct motor_state_s{
 	bool needs_init;
 	bool needs_update;
 	bool mode_needs_update;
-	
+
 };
 
-struct battery_state_s{	
+struct battery_state_s{
 	uint32_t distance;	//Or put it in the motor...
 	bool online;
 	uint8_t soc;
@@ -146,37 +146,37 @@ struct display_state_s{
 	uint8_t button_state_prev;
 	uint8_t button_state;
 	uint8_t button_waitforrelease;
-	
+
 	//Settings
 	uint8_t function_val1;	//Values for the function menu: Speed/Voltage
 	uint8_t function_val2;	//Values for the function menu: Brake Strength
 	uint8_t function_val3;	//Values for the function menu: Brake PWM Test
 	uint8_t function_val4;	//Values for the function menu: Activates it.
 	uint8_t function_val5;	//Values for the function menu: ?
-	
+
 	//Menu timeout:
 	uint16_t menu_timeout;
-	
-	
+
+
 	uint16_t menu_downcnt;	//Hold down counter
-	
+
 	uint8_t poll_cnt;	//Counter which seems to be required for polling.
 	bool light;
-	bool cruise;			
+	bool cruise;
 	bool online;			//If the display is responding.
 	uint16_t offline_cnt;	//If too high, the display is offline.
-	
+
 	//Custom stuff.
 	uint16_t voltage;
 	int16_t power;
 	int16_t current;
 	int16_t strain;			//Strain value
 	int16_t strain_th;		//Strain threshold.
-	
+
 	uint8_t func;
-	
-	bool road_legal;	//When true, middle button overrides throttle.	
-	
+
+	bool road_legal;	//When true, middle button overrides throttle.
+
 	uint32_t distance;	//What value should be in the distance bar.
 	uint16_t speed;		//Value in the speed bar. 10 km/h is stored as 100
 	uint8_t soc;		//What value should be in the soc bar
@@ -184,11 +184,12 @@ struct display_state_s{
 	uint32_t error;		//Error value that it displayed when not 0.
 
 	//Bunch of test values.
-	uint16_t value1;		
+	uint16_t value1;
 	uint16_t value2;
 	uint16_t value3;
 	uint16_t value4;
-	
+	uint16_t value5;
+
 	bool needs_update;
 };
 

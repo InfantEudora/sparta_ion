@@ -1,6 +1,6 @@
 /*
-	Created: 6/23/2014 5:07:46 PM - Copyright (c) 
-	Author: D. Prins			
+	Created: 6/23/2014 5:07:46 PM - Copyright (c)
+	Author: D. Prins
 		Infant - infant.tweakblogs.net
 		mail: prinsje2004 at gmail
 
@@ -14,7 +14,7 @@
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-	
+
 	    This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -32,7 +32,7 @@
 //Bunch of global variables:
 motor_state_s motor;
 battery_state_s battery;
-display_state_s display; 
+display_state_s display;
 
 //Used by timer.
 bool wait_for_last_char = false;
@@ -51,32 +51,32 @@ void bus_init(bowbus_net_s* bus){
 
 	bus->tx_state = NET_STATE_WAITING;
 	bus->tx_buff_cnt = 0;
-	
+
 	bus->new_mesage = false;
-	
+
 	//Set the motors's state
-	motor.speed = 0;	
+	motor.speed = 0;
 	motor.mode = 0;
 	motor.needs_update = false;
-	motor.mode_needs_update = false;		
-	motor.needs_init = true;	
+	motor.mode_needs_update = false;
+	motor.needs_init = true;
 	motor.throttle = 0;
 	motor.brake = 0;
-	
+
 	//Set the battery's state
 	battery.online = false;
 	battery.soc = 0;
 	battery.distance = 0;
-	
+
 	//Set the display's state.
 	memset(&display,0,sizeof(display_state_s));
 	display.light = false;
 	display.cruise = false;
 	display.poll_cnt = 0;
-	display.needs_update = false;	
+	display.needs_update = false;
 	display.menu_timeout = 0 ;
 	display.road_legal = true;
-	
+
 	wait_for_last_char = false;
 	display.function_val2 = 9;
 	display.function_val3 = 1;
@@ -95,7 +95,7 @@ void bus_endmessage(bowbus_net_s* bus){
 			bus->rx_buff_cnt = 0;
 			bus->rx_state =  NET_STATE_WAITING;
 		}
-	}	
+	}
 }
 
 /*
@@ -104,7 +104,7 @@ void bus_endmessage(bowbus_net_s* bus){
 void bus_receive(bowbus_net_s* bus, uint8_t chr){
 	//Reset timer:
 	wait_for_last_char = true;
-	
+
 	//Receive state machine:
 	if (bus->rx_state == NET_STATE_WAITING){
 		//Wait for 0x10
@@ -117,24 +117,24 @@ void bus_receive(bowbus_net_s* bus, uint8_t chr){
 		if (chr == FRAME_ESCAPE){
 			if (bus->rx_buff_cnt < 128){
 				bus->rx_buff[bus->rx_buff_cnt++] = chr;
-			}			
+			}
 			bus->rx_state =  NET_STATE_READING;
 		}else{
 			//Previous character was a Frame start.
 			if (bus->rx_buff_cnt){
-				//Set the new message flag				
-				if (bus->rx_buff_cnt < 128){					
+				//Set the new message flag
+				if (bus->rx_buff_cnt < 128){
 					memcpy((uint8_t*)bus->msg_buff,(uint8_t*)bus->rx_buff,bus->rx_buff_cnt);
 					bus->msg_len = bus->rx_buff_cnt;
 					bus->new_mesage = true;
 				}else{
-					//? 
-				}				
+					//?
+				}
 			}
 			//This one is data.
 			bus->rx_buff_cnt = 2;
 			bus->rx_buff[0] = FRAME_HEADER;
-			bus->rx_buff[1] = chr;			
+			bus->rx_buff[1] = chr;
 			bus->rx_state =  NET_STATE_READING;
 		}
 	}else if (bus->rx_state == NET_STATE_READING){
@@ -146,7 +146,7 @@ void bus_receive(bowbus_net_s* bus, uint8_t chr){
 			//This one is data.
 			if (bus->rx_buff_cnt < 128){
 				bus->rx_buff[bus->rx_buff_cnt++] = chr;
-			}			
+			}
 			//Don't change the state.
 		}
 	}
@@ -159,17 +159,17 @@ bool bus_parse_motor(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 	//Do a CRC check:
 	uint8_t crc_calc = crc8_bow(_data,len-1);
 	uint8_t crc_msg = _data[len-1];
-	
+
 	//Match?
 	if (crc_calc != crc_msg){
 		return false;
 	}
-	
+
 	//Message was sent from a device address, to another device address. It works when masked with 0xF0.
 	//Not sure what the lower 4 bits do yet.
 	uint8_t to   = _data[1] & 0xF0;
 	uint8_t from = _data[2] & 0xF0;
-	
+
 	//We'll call this next bit the command. I honestly have no clue, but we can differentiate messages on it.
 	uint8_t cmd;
 	if (len > 3){
@@ -177,7 +177,7 @@ bool bus_parse_motor(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 	}else{
 		cmd = 0;
 	}
-	
+
 	//Pretty sure this is the length of the data in the message.
 	uint8_t data_len;
 	if (len > 3){
@@ -185,22 +185,22 @@ bool bus_parse_motor(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 		data_len = _data[2] & 0x0F;
 	}else{
 		data_len = 0;
-	}		
-	
+	}
+
 	//We're a motor, but we can listen to the communication between battery and display.
-	if ((from == ADDR_DISPLAY) && (to == ADDR_BATTERY)){		
+	if ((from == ADDR_DISPLAY) && (to == ADDR_BATTERY)){
 		//Clear the offline count:
 		display.offline_cnt = 0;
 		//Declare it online
 		display.online = true;
-		
+
 		//Handle different commands.
 		if ((cmd == 0x22) && (data_len == 0x02)){//ACK to display query.
 			//Update button state:
 			display.button_state_prev = display.button_state;
-			display.button_state = _data[4] & (BUTT_MASK_TOP|BUTT_MASK_FRONT);			
+			display.button_state = _data[4] & (BUTT_MASK_TOP|BUTT_MASK_FRONT);
 			//Do not handle button presses if you're a motor.
-			//bus_display_buttonpress(bus);		
+			//bus_display_buttonpress(bus);
 		}else if ((cmd == 0x26) && (data_len == 0x00)){//ACK to a display update message.
 			display.needs_update = false;
 		}
@@ -211,9 +211,9 @@ bool bus_parse_motor(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 			motor.throttle = _data[5];
 			motor.brake = _data[6];
 			display.function_val2 = _data[7];
-			
+
 			bus_send_battery_ack(bus,cmd);
-		}		
+		}
 	}
 	return true;
 }
@@ -226,17 +226,17 @@ bool bus_parse_battery(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 	//Do a CRC check:
 	uint8_t crc_calc = crc8_bow(_data,len-1);
 	uint8_t crc_msg = _data[len-1];
-	
+
 	//Match?
 	if (crc_calc != crc_msg){
 		return false;
-	}		
+	}
 
 	//Message was sent from a device address, to another device address. It works when masked with 0xF0.
 	//Not sure what the lower 4 bits do yet.
 	uint8_t to   = _data[1] & 0xF0;
 	uint8_t from = _data[2] & 0xF0;
-	
+
 	//We'll call this next bit the command. I honestly have no clue, but we can differentiate messages on it.
 	uint8_t cmd;
 	if (len > 3){
@@ -244,7 +244,7 @@ bool bus_parse_battery(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 	}else{
 		cmd = 0;
 	}
-	
+
 	//Pretty sure this is the length of the data in the message.
 	uint8_t data_len;
 	if (len > 3){
@@ -252,29 +252,29 @@ bool bus_parse_battery(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 		data_len = _data[2] & 0x0F;
 	}else{
 		data_len = 0;
-	}		
-	
-	//Today, we're a battery, and update the display.	
-	if ((from == ADDR_DISPLAY) && (to == ADDR_BATTERY)){		
+	}
+
+	//Today, we're a battery, and update the display.
+	if ((from == ADDR_DISPLAY) && (to == ADDR_BATTERY)){
 		//Clear the offline count:
 		display.offline_cnt = 0;
 		//Declare it online
 		display.online = true;
-		
+
 		//Handle different commands.
 		if ((cmd == 0x22) && (data_len == 0x02)){//ACK to display query.
 			//Update button state:
 			display.button_state_prev = display.button_state;
-			display.button_state = _data[4] & (BUTT_MASK_TOP|BUTT_MASK_FRONT);			
+			display.button_state = _data[4] & (BUTT_MASK_TOP|BUTT_MASK_FRONT);
 			//Handle
-			bus_display_buttonpress(bus);		
+			bus_display_buttonpress(bus);
 		}else if ((cmd == 0x26) && (data_len == 0x00)){//ACK to a display update message.
 			display.needs_update = false;
 		}
 	}else if ((from == ADDR_MOTOR) && (to == ADDR_BATTERY)){
 		//Declare it online
 		motor.online = true;
-		
+
 		if ((cmd == 0x30) && (data_len == 14)){
 			display.speed =  _data[4] * 2; //Convert back
 			motor.status =  _data[5];
@@ -290,30 +290,30 @@ bool bus_parse_battery(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 			display.value3 |= _data[15];
 			display.value4 = _data[16]<<8;
 			display.value4 |= _data[17];
-		}			
+		}
 	}
 	return true;
 }
 
 
-/*	
+/*
 	Parse all trafic, and do absolutely nothing.
 */
 bool bus_parse(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 	//Do a CRC check:
 	uint8_t crc_calc = crc8_bow(_data,len-1);
 	uint8_t crc_msg = _data[len-1];
-	
+
 	//Match?
 	if (crc_calc != crc_msg){
 		return false;
-	}		
+	}
 
 	//Message was sent from a device address, to another device address. It works when masked with 0xF0.
 	//Not sure what the lower 4 bits do yet.
 	uint8_t to   = _data[1] & 0xF0;
 	uint8_t from = _data[2] & 0xF0;
-	
+
 	//We'll call this next bit the command. I honestly have no clue, but we can differentiate messages on it.
 	uint8_t cmd;
 	if (len > 3){
@@ -321,7 +321,7 @@ bool bus_parse(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 	}else{
 		cmd = 0;
 	}
-	
+
 	//Pretty sure this is the length of the data in the message.
 	uint8_t data_len;
 	if (len > 3){
@@ -329,22 +329,22 @@ bool bus_parse(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 		data_len = _data[2] & 0x0F;
 	}else{
 		data_len = 0;
-	}		
-	
-	//Today, we're a battery, and update the display.	
-	if ((from == ADDR_DISPLAY) && (to == ADDR_BATTERY)){		
+	}
+
+	//Today, we're a battery, and update the display.
+	if ((from == ADDR_DISPLAY) && (to == ADDR_BATTERY)){
 		//Clear the offline count:
 		display.offline_cnt = 0;
 		//Declare it online
 		display.online = true;
-		
+
 		//Handle different commands.
 		if ((cmd == 0x22) && (data_len == 0x02)){//ACK to display query.
 			//Update button state:
 			display.button_state_prev = display.button_state;
-			display.button_state = _data[4] & (BUTT_MASK_TOP|BUTT_MASK_FRONT);			
+			display.button_state = _data[4] & (BUTT_MASK_TOP|BUTT_MASK_FRONT);
 			//Handle
-			bus_display_buttonpress(bus);		
+			bus_display_buttonpress(bus);
 		}else if ((cmd == 0x26) && (data_len == 0x00)){//ACK to a display update message.
 			display.needs_update = false;
 		}
@@ -357,8 +357,8 @@ bool bus_parse(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 			motor.voltage = _data[8]<<8;
 			motor.voltage |= _data[9];
 		}
-	}else if ((from == ADDR_MOTOR) && (to == ADDR_BATTERY)){		
-		if ((cmd == 0x30) && (data_len == 14)){			
+	}else if ((from == ADDR_MOTOR) && (to == ADDR_BATTERY)){
+		if ((cmd == 0x30) && (data_len == 14)){
 			display.speed =  _data[4] * 2; //Convert back
 			motor.status =  _data[5];
 			motor.current = _data[6]<<8;
@@ -372,7 +372,7 @@ bool bus_parse(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 			display.value3 = _data[14]<<8;
 			display.value3 |= _data[15];
 			display.value4 = _data[16]<<8;
-			display.value4 |= _data[17];			
+			display.value4 |= _data[17];
 		}
 	}
 
@@ -382,13 +382,13 @@ bool bus_parse(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 /*
 	Send back data to the battery, depending on the command.
 */
-void bus_send_battery_ack(bowbus_net_s* bus,uint8_t cmd){	
+void bus_send_battery_ack(bowbus_net_s* bus,uint8_t cmd){
 	if (cmd == 0x30){
 		uint8_t msg[19];
 		msg[0] = 0x10;
 		msg[1] = ADDR_BATTERY | ADDR_MASK_RESP; //To
 		msg[2] = ADDR_MOTOR | 14; //From | data len
-		msg[3] = cmd; //Cmd		
+		msg[3] = cmd; //Cmd
 		//Data:
 		msg[4] = display.speed /2; //Won't fit otherise
 		msg[5] = motor.status; //Status
@@ -409,7 +409,7 @@ void bus_send_battery_ack(bowbus_net_s* bus,uint8_t cmd){
 		msg[16] = display.value4>>8;
 		msg[17] = (uint8_t)display.value4;
 
-		msg[18] = crc8_bow(msg,18);		
+		msg[18] = crc8_bow(msg,18);
 		//Send the message.
 		bus_send(bus,msg,19);
 	}
@@ -417,7 +417,7 @@ void bus_send_battery_ack(bowbus_net_s* bus,uint8_t cmd){
 
 //Start sending data over the bus. Returns false if busy.
 bool bus_send(bowbus_net_s* bus, uint8_t* data, uint8_t len){
-	if (bus->tx_state == NET_STATE_WAITING){	
+	if (bus->tx_state == NET_STATE_WAITING){
 		memcpy((uint8_t*)bus->tx_buff,(uint8_t*)data,len);
 		bus->tx_buff_size = len;
 		bus->tx_buff_cnt = 0;
@@ -437,7 +437,7 @@ bool bus_isbusy(bowbus_net_s* bus){
 		return true;
 	}else{
 		return false;
-	}	
+	}
 }
 
 //Send a poll command to display, to receive the state off the buttons.
@@ -459,7 +459,7 @@ void bus_display_poll(bowbus_net_s* bus){
 	bus_send(bus,msg,6);
 }
 
-//Send a poll command to motor, to receive it's state. We'll update it's mode, throttle and brake. 
+//Send a poll command to motor, to receive it's state. We'll update it's mode, throttle and brake.
 void bus_motor_poll(bowbus_net_s* bus){
 	uint8_t msg[9];
 	msg[0] = 0x10;
@@ -470,7 +470,7 @@ void bus_motor_poll(bowbus_net_s* bus){
 	msg[5] = motor.throttle; //GAS
 	msg[6] = motor.brake; //BRAKE
 	msg[7] = display.function_val2; //Speed limit
-	msg[8] = crc8_bow(msg,8);	
+	msg[8] = crc8_bow(msg,8);
 	//Sent the message.
 	bus_send(bus,msg,9);
 }
@@ -482,8 +482,8 @@ void bus_tick(bowbus_net_s* bus){
 		if (display.menu_downcnt < 0xFFFF){
 			display.menu_downcnt++;
 		}
-	}	
-	
+	}
+
 	//Automatically go back to default menu when no buttons are pressed.
 	if (display.menu_downcnt < 100){
 		if (display.menu_timeout){
@@ -491,8 +491,8 @@ void bus_tick(bowbus_net_s* bus){
 		}else{
 			display.func = 0;
 		}
-	}	
-	
+	}
+
 	//Useless?
 	if (motor.tick_cnt){
 		motor.tick_cnt--;
@@ -511,13 +511,13 @@ void bus_display_buttonpress(bowbus_net_s* bus){
 			return;
 		}
 	}
-	
+
 	//Parse button presses if has changed to released:
 	if ((display.button_state_prev != display.button_state)){
 		//Update the timeout:
 		display.menu_timeout = 200;
 		display.menu_downcnt = 0;
-		
+
 		//Handle presses
 		if (display.button_state_prev == (BUTT_MASK_TOP|BUTT_MASK_FRONT)){
 			display.light = !display.light;
@@ -531,25 +531,25 @@ void bus_display_buttonpress(bowbus_net_s* bus){
 				//Cycle through functions
 				display.func++;
 				display.func %= 6;
-				display.function_val4 = 0;					
-			}			
+				display.function_val4 = 0;
+			}
 		}else if (display.button_state_prev == BUTT_MASK_FRONT){
-			
+
 			//Handle button press depending on menu:
 			if (display.func == 0){
 				if (display.road_legal == false){
 					//Test mode
-					
+
 				}else{
 					motor.mode++;
 					if (motor.mode == 6){
 						motor.mode = 0;
 					}
-				}				
+				}
 				motor.needs_update = true;
 			}else if (display.func == 1){
-				display.function_val1++;		
-				if (display.function_val1 == 7){
+				display.function_val1++;
+				if (display.function_val1 == 8){
 					display.function_val1 = 0;
 				}
 				motor.needs_update = true;
@@ -575,7 +575,7 @@ void bus_display_buttonpress(bowbus_net_s* bus){
 				display.function_val5++;
 				if (display.function_val5 == 4){
 					display.function_val5 = 0;
-				}				
+				}
 			}
 		}
 	}else{
@@ -594,12 +594,12 @@ bool bus_display_update(bowbus_net_s* bus){
 	int32_t distance = display.distance;
 	uint16_t speed = display.speed;
 	uint8_t soc = display.throttle;
-	
+
 	//Decimal numbers
-	uint8_t dec[5] = {0};	
+	uint8_t dec[5] = {0};
 	//Bus message
 	uint8_t msg[16];
-	
+
 	//Assign distance bar
 	if (display.func == 4){
 		//Road legal menu
@@ -656,8 +656,8 @@ bool bus_display_update(bowbus_net_s* bus){
 	}else if (display.func == 0){
 		uint32_t t;
 		//Default: show the current.
-		if (display.error == 0){			
-			distance = display.current;				
+		if (display.error == 0){
+			distance = display.current;
 			//Display a sign if below zero.
 			if (distance < 0){
 				//Create the characters.
@@ -671,10 +671,10 @@ bool bus_display_update(bowbus_net_s* bus){
 				//Leave first digit empty.
 				dec[0] = DISP_CHAR_CLEAR;
 			}
-			
+
 			//if (display.function_val5 == 0){
 				//Remove the leading zero.
-				
+
 				if (t < 1000){
 					dec[1] = DISP_CHAR_CLEAR;
 				}else{
@@ -685,7 +685,7 @@ bool bus_display_update(bowbus_net_s* bus){
 				t-= dec[2]*100;
 				dec[3] = t / 10;
 				t-= dec[3]*10;
-			
+
 			/*}else{
 				//Remove the leading zeros
 				if (t < 1000){
@@ -706,17 +706,17 @@ bool bus_display_update(bowbus_net_s* bus){
 					dec[3] = t / 10;
 					t-= dec[3]*10;
 				}
-			}*/			
+			}*/
 		}else{
-			distance = display.error;	
-			t = distance;		
+			distance = display.error;
+			t = distance;
 			dec[0] = DISP_CHAR_E_UP;
 			dec[1] = 0;
-		}	
+		}
 
-		
+
 		dec[4] = t;
-		
+
 		if (display.function_val1 == 1){
 			//Display voltage in speedo:
 			speed = display.voltage / 10;
@@ -729,9 +729,11 @@ bool bus_display_update(bowbus_net_s* bus){
 		}else if (display.function_val1 == 5){
 			speed = display.value4;
 		}else if (display.function_val1 == 6){
+			speed = display.value5;
+		}else if (display.function_val1 == 7){
 			//Display power
 			speed = display.power / 10;
-		
+
 		}else{
 			//Just display speed.
 			speed = display.speed;
@@ -743,28 +745,28 @@ bool bus_display_update(bowbus_net_s* bus){
 		dec[2] = DISP_CHAR_CLEAR;
 		dec[3] = DISP_CHAR_CLEAR;
 		dec[4] = DISP_CHAR_CLEAR;
-	}	
-	
+	}
+
 	//Store them: | 0xC if you want empty instead of 0.
 	msg[10] = 0xf0 | (dec[0]);
 	msg[11] = ((0x10 * dec[1])) | dec[2];
-	msg[12] = ((0x10 * dec[3])) | dec[4];	
-	
+	msg[12] = ((0x10 * dec[3])) | dec[4];
+
 	//Break the Speed into powers of 10.
 	dec[0] = (speed / 100);
 	dec[1] = (speed - (100*dec[0])) / 10;
-	dec[2] = speed % 10;	
-	
+	dec[2] = speed % 10;
+
 	uint8_t data_len = 0x09;
-	uint8_t cmd = 0x26;	
-	
+	uint8_t cmd = 0x26;
+
 	msg[0] = FRAME_HEADER;
 	msg[1] = ADDR_DISPLAY | 0x01;		//Dunno what the one's for.
 	msg[2] = ADDR_BATTERY | data_len;	//I guess that goes there.
 	msg[3] = cmd;
-	
+
 	//Assign some of the LCD segment masks
-	uint8_t dmask = 0;	
+	uint8_t dmask = 0;
 	if (motor.mode){
 		if (motor.mode & 0x01){
 			dmask |= DISP_MASK_LOW;
@@ -777,9 +779,9 @@ bool bus_display_update(bowbus_net_s* bus){
 		}
 	}else{
 		dmask |= DISP_MASK_OFF;
-	}	
+	}
 	msg[4] = dmask;
-	
+
 	//Assign some more
 	dmask = 0;
 	if (!display.road_legal){
@@ -787,21 +789,21 @@ bool bus_display_update(bowbus_net_s* bus){
 	}
 	if (display.cruise){
 		dmask |= DISP_MASK_TOTAL;
-	}	
+	}
 	if (display.light){
 		dmask |= DISP_MASK_LIGHT;
 	}
-	msg[5] = dmask;	
-	
+	msg[5] = dmask;
+
 	//This guy allows you to set comma's, hide/show the km label and hide/show the soc
 	msg[6] = DISP_MASK_SOC;
 	if ((display.func == 0) && (display.error == 0)/* && (display.function_val5 == 0)*/){
 		msg[6] |= DISP_MASK_COMMA;
 	}
-		
-	//Set the SOC. It has a range 0 to 100, and will ignore a higher value.	
+
+	//Set the SOC. It has a range 0 to 100, and will ignore a higher value.
 	msg[7] = soc;
-	
+
 	//Put the speed in the data, or the menu:
 	if (display.func != 0){
 		msg[8] = 0x0F;
@@ -810,13 +812,13 @@ bool bus_display_update(bowbus_net_s* bus){
 		msg[8] = 0xC0 | 0x01 * dec[0];
 		msg[9] = ((0x10 * dec[1])) | dec[2];
 	}
-	
+
 	//Computer the CRC:
-	uint8_t crc = crc8_bow(msg,13); 
+	uint8_t crc = crc8_bow(msg,13);
 	msg[13] = crc;
-	
+
 	//Send it out.
-	return bus_send(bus,msg,14);	
+	return bus_send(bus,msg,14);
 }
 
 //Message should be auto escaped when sending.

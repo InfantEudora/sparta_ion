@@ -98,6 +98,7 @@ void status_clear(void);
 bool isfaultset(void);
 void pwm_less(uint8_t by);
 void pwm_more(uint8_t by);
+void pwm_update(void);
 void commute_start(void);
 void commute_forward(void);
 void commute_backward(void);
@@ -530,7 +531,7 @@ bool get_hall(void){
 	#if(HARDWARE_VER == HW_CTRL_REV1)
 	//Maybe....? Yep... they're open-drain.
 	PORTD.DIRCLR = PIN5_bm | PIN6_bm | PIN7_bm;
-	
+
 	//Use internal pullups
 	PORTD.PIN5CTRL = PORT_OPC_PULLUP_gc;
 	PORTD.PIN6CTRL = PORT_OPC_PULLUP_gc;
@@ -543,7 +544,7 @@ bool get_hall(void){
 		hall_state |= 0x04;
 	}
 	if  (PORTD.IN & PIN7_bm){
-		hall_state |= 0x02;	
+		hall_state |= 0x02;
 	}
 	#else
 	//Maybe....? Yep... they're open-drain.
@@ -762,6 +763,18 @@ bool get_brake(void){
 	return true;
 }
 
+void pwm_update(){
+	//Update PWM registers:
+	//Lock the PWM register.
+	TCC0.CTRLFSET = TC0_LUPD_bm;
+	//Apply PWM settings.
+	TCC0.CCCBUF = pwm;
+	TCC0.CCBBUF = pwm;
+	TCC0.CCABUF = pwm;
+	//Update the PWM registers.
+	TCC0.CTRLFCLR = TC0_LUPD_bm;
+}
+
 
 /*
 	Read factory calibration from NVM:
@@ -860,9 +873,7 @@ int main(void){
 		}
 
 		//Apply PWM settings.
-		TCC0.CCA = pwm;
-		TCC0.CCB = pwm;
-		TCC0.CCC = pwm;
+		pwm_update();
 
 		//Get halls sensors.
 		if (!get_hall()){
@@ -902,9 +913,7 @@ int main(void){
 			commute_start();
 			pwm = estimate_pwm_byspeed();
 			//Apply PWM settings.
-			TCC0.CCA = pwm;
-			TCC0.CCB = pwm;
-			TCC0.CCC = pwm;
+			pwm_update();
 		}
 
 		if (display.online == false){
@@ -1477,8 +1486,8 @@ int main(void){
 					strain_gain = display.function_val5+1;
 					#endif
 
-
 					display.value4 = pwm;
+					display.value5 = hall_state;
 
 					//Temperature
 					ad_temp_av = ad_temp_sum / meas_cnt;
@@ -1525,7 +1534,6 @@ int main(void){
 					//Goto mode 0:
 					if (status){
 						motor.mode = 0;
-
 					}
 
 					bus_display_update(&bus);
