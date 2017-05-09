@@ -25,14 +25,16 @@ Firmware:
 ----------------
 
 The firmware running your bike's motor, consists of three parts:
-0. A bootloader, started on powerup.
-0. The actual firmware, called application executed by the bootloader.
-0. Configuration memory, stored in ROM.
+ - A bootloader, started on powerup.
+ - The actual firmware, called application executed by the bootloader.
+ - Configuration memory, stored in ROM.
 
 The bootloader uses two blocks to identify the harware it's running on, and what firmware should be loaded.
 The firware uses one block to read/write settings, which are currently the strain gauge calibration.
 
-TODO:
+If you wan't to build a control PCB, use the latest revision of 3phasecntrl.
+
+New Hardare Revision Wishlist:
  - Crystal
- - ESD on HALL input.
- -
+ - ESD protection on HALL input. (REV2)
+
